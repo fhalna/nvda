@@ -10559,6 +10559,16 @@ msgstr "date actuelle"
 msgid "current time"
 msgstr "heure actuelle"
 
+#. Translators: Presented when a control has horizontal orientation (e.g., a horizontal slider)
+#: controlTypes\orientation.py:30
+msgid "horizontal"
+msgstr "horizontal"
+
+#. Translators: Presented when a control has vertical orientation (e.g., a vertical slider)
+#: controlTypes\orientation.py:32
+msgid "vertical"
+msgstr "vertical"
+
 #. Translators: The word for window of a program such as document window.
 #: controlTypes\role.py:212
 msgid "window"
