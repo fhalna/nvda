@@ -697,6 +697,13 @@ def getObjectPropertiesSpeech(  # noqa: C901
 			# getPropertiesSpeech names this "current", but the NVDAObject property is
 			# named "isCurrent", it's type should always be controltypes.IsCurrent
 			newPropertyValues["current"] = obj.isCurrent
+		elif value and name == "orientation":
+			# Only report orientation if it differs from the role's default
+			orientation = obj.orientation
+			if orientation != controlTypes.Orientation.UNDEFINED:
+				role = newPropertyValues.get("_role", obj.role)
+				if _shouldReportOrientation(role, orientation):
+					newPropertyValues["orientation"] = orientation
 
 		elif value and name == "hasDetails":
 			newPropertyValues["hasDetails"] = bool(obj.annotations)
@@ -916,6 +923,24 @@ def getObjectSpeech(
 	return sequence
 
 
+def _shouldReportOrientation(role: controlTypes.Role, orientation: controlTypes.Orientation) -> bool:
+	"""Determine if orientation should be reported based on the role's default.
+
+	Only non-default orientations are reported to reduce verbosity.
+	For example, a horizontal slider should not announce "horizontal" since that's the default,
+	but a vertical slider should announce "vertical".
+	"""
+	if orientation == controlTypes.Orientation.UNDEFINED:
+		return False
+	if orientation == controlTypes.Orientation.HORIZONTAL:
+		# Report horizontal only if role defaults to vertical
+		return role in aria.rolesDefaultVertical
+	if orientation == controlTypes.Orientation.VERTICAL:
+		# Report vertical only if role defaults to horizontal
+		return role in aria.rolesDefaultHorizontal
+	return False
+
+
 def _objectSpeech_calculateAllowedProps(
 	reason: OutputReason,
 	shouldReportTextContent: bool,
@@ -947,6 +972,7 @@ def _objectSpeech_calculateAllowedProps(
 		"rowSpan": True,
 		"columnSpan": True,
 		"current": True,
+		"orientation": True,
 	}
 	if reason in (OutputReason.FOCUSENTERED, OutputReason.MOUSE):
 		allowProperties["value"] = False
@@ -2117,6 +2143,11 @@ def getPropertiesSpeech(  # noqa: C901
 	if isCurrent != controlTypes.IsCurrent.NO:
 		textList.append(isCurrent.displayString)
 
+	# speak orientation property EG aria-orientation
+	orientation = propertyValues.get("orientation", controlTypes.Orientation.UNDEFINED)
+	if orientation != controlTypes.Orientation.UNDEFINED:
+		textList.append(orientation.displayString)
+
 	# are there further details
 	hasDetails = propertyValues.get("hasDetails", False)
 	if hasDetails:
@@ -2274,6 +2305,7 @@ def getControlFieldSpeech(  # noqa: C901
 	states = attrs.get("states", set())
 	keyboardShortcut = attrs.get("keyboardShortcut", "")
 	isCurrent = attrs.get("current", controlTypes.IsCurrent.NO)
+	orientation = attrs.get("orientation", controlTypes.Orientation.UNDEFINED)
 	hasDetails = attrs.get("hasDetails", False)
 	detailsRoles: _AnnotationRolesT = attrs.get("detailsRoles", tuple())
 	placeholderValue = attrs.get("placeholder", None)
@@ -2340,6 +2372,11 @@ def getControlFieldSpeech(  # noqa: C901
 			keyboardShortcut=keyboardShortcut,
 		)
 	isCurrentSequence = getPropertiesSpeech(reason=reason, current=isCurrent)
+	# Only report orientation if it differs from the role's default
+	if orientation != controlTypes.Orientation.UNDEFINED and _shouldReportOrientation(role, orientation):
+		orientationSequence = getPropertiesSpeech(reason=reason, orientation=orientation)
+	else:
+		orientationSequence = []
 	hasDetailsSequence = getPropertiesSpeech(reason=reason, hasDetails=hasDetails, detailsRoles=detailsRoles)
 	placeholderSequence = getPropertiesSpeech(reason=reason, placeholder=placeholderValue)
 	errorMessageSequence = getPropertiesSpeech(reason=reason, errorMessage=errorMessage)
@@ -2468,6 +2505,7 @@ def getControlFieldSpeech(  # noqa: C901
 		tableCellSequence = getPropertiesSpeech(_tableID=tableID, **getProps)
 		tableCellSequence.extend(stateTextSequence)
 		tableCellSequence.extend(isCurrentSequence)
+		tableCellSequence.extend(orientationSequence)
 		tableCellSequence.extend(hasDetailsSequence)
 		types.logBadSequenceTypes(tableCellSequence)
 		return tableCellSequence
@@ -2514,6 +2552,7 @@ def getControlFieldSpeech(  # noqa: C901
 		out.extend(roleTextSequence if speakStatesFirst else stateTextSequence)
 		out.append(containerContainsText)
 		out.extend(isCurrentSequence)
+		out.extend(orientationSequence)
 		out.extend(hasDetailsSequence)
 		out.extend(valueSequence)
 		out.extend(descriptionSequence)
@@ -2551,6 +2590,8 @@ def getControlFieldSpeech(  # noqa: C901
 		out = []
 		if isCurrent != controlTypes.IsCurrent.NO:
 			out.extend(isCurrentSequence)
+		if orientationSequence:
+			out.extend(orientationSequence)
 		if hasDetails:
 			out.extend(hasDetailsSequence)
 		if descriptionSequence and _reportDescriptionAsAnnotation:

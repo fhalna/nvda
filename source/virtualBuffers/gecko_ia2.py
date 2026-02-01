@@ -47,6 +47,21 @@ def _getNormalizedCurrentAttrs(attrs: textInfos.ControlField) -> typing.Dict[str
 	return {}
 
 
+def _getNormalizedOrientationAttrs(attrs: textInfos.ControlField) -> typing.Dict[str, typing.Any]:
+	valForOrientation = attrs.get("IAccessible2::attribute_orientation", "")
+	try:
+		orientation = controlTypes.Orientation(valForOrientation)
+	except ValueError:
+		if valForOrientation:
+			log.debugWarning(f"Unknown orientation value: {valForOrientation}")
+		orientation = controlTypes.Orientation.UNDEFINED
+	if orientation != controlTypes.Orientation.UNDEFINED:
+		return {
+			"orientation": orientation,
+		}
+	return {}
+
+
 class Gecko_ia2_TextInfo(VirtualBufferTextInfo):
 	def _setSelectionOffsets(self, start: int, end: int):
 		super()._setSelectionOffsets(start, end)
@@ -123,6 +138,7 @@ class Gecko_ia2_TextInfo(VirtualBufferTextInfo):
 
 		attrs["_description-from"] = self._calculateDescriptionFrom(attrs)
 		attrs.update(_getNormalizedCurrentAttrs(attrs))
+		attrs.update(_getNormalizedOrientationAttrs(attrs))
 
 		placeholder = self._getPlaceholderAttribute(attrs, "IAccessible2::attribute_placeholder")
 		if placeholder is not None:

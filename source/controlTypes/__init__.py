@@ -5,6 +5,7 @@
 
 from .formatFields import TextPosition, TextAlign, VerticalTextAlign
 from .isCurrent import IsCurrent
+from .orientation import Orientation
 from .outputReason import OutputReason
 from .processAndLabelStates import processAndLabelStates
 from .role import Role, silentRolesOnFocus, silentValuesForRoles
@@ -24,6 +25,7 @@ from .deprecatedAliases import *  # noqa: F403, F401
 # consult the deprecatedAliases module for alternatives.
 __all__ = [
 	"IsCurrent",
+	"Orientation",
 	"OutputReason",
 	"processAndLabelStates",
 	"Role",

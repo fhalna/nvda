@@ -123,3 +123,22 @@ ariaHaspopupValuesToNVDAStates: Dict[str, controlTypes.State] = {
 	"listbox": controlTypes.State.HASPOPUP_LIST,
 	"tree": controlTypes.State.HASPOPUP_TREE,
 }
+
+#: Roles that default to horizontal orientation per ARIA spec.
+#: Only announce orientation when it differs from these defaults.
+rolesDefaultHorizontal = frozenset({
+	controlTypes.Role.SLIDER,
+	controlTypes.Role.SEPARATOR,
+	controlTypes.Role.TOOLBAR,
+	controlTypes.Role.MENUBAR,
+	controlTypes.Role.TABCONTROL,
+})
+
+#: Roles that default to vertical orientation per ARIA spec.
+#: Only announce orientation when it differs from these defaults.
+rolesDefaultVertical = frozenset({
+	controlTypes.Role.SCROLLBAR,
+	controlTypes.Role.LIST,
+	controlTypes.Role.POPUPMENU,
+	controlTypes.Role.TREEVIEW,
+})

@@ -175,6 +175,15 @@ class Ia2Web(IAccessible):
 			log.debugWarning(f"Unknown 'current' IA2Attribute value: {ia2attrCurrent}")
 			return controlTypes.IsCurrent.NO
 
+	def _get_orientation(self) -> controlTypes.Orientation:
+		ia2AttrOrientation: str = self.IA2Attributes.get("orientation", "")
+		try:
+			return controlTypes.Orientation(ia2AttrOrientation)
+		except ValueError:
+			if ia2AttrOrientation:
+				log.debugWarning(f"Unknown 'orientation' IA2Attribute value: {ia2AttrOrientation}")
+			return controlTypes.Orientation.UNDEFINED
+
 	def _get_placeholder(self):
 		placeholder = self.IA2Attributes.get("placeholder", None)
 		return placeholder

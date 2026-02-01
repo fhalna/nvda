@@ -1196,6 +1196,15 @@ class NVDAObject(
 		"""
 		return controlTypes.IsCurrent.NO
 
+	orientation: controlTypes.Orientation  #: type info for auto property _get_orientation
+
+	def _get_orientation(self) -> controlTypes.Orientation:
+		"""Gets the orientation of this object if explicitly set.
+		This maps to aria-orientation.
+		@return: The orientation, or Orientation.UNDEFINED if not set.
+		"""
+		return controlTypes.Orientation.UNDEFINED
+
 	def _get_shouldAcceptShowHideCaretEvent(self):
 		"""Some objects/applications send show/hide caret events when we don't expect it, such as when the cursor is blinking.
 		@return: if show/hide caret events should be accepted for this object.
