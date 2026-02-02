@@ -243,18 +243,39 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if self._isActive:
 			return
 
-		# Register for speech events
-		pre_speechQueued.register(self._onSpeechQueued)
+		try:
+			# Register for speech events
+			pre_speechQueued.register(self._onSpeechQueued)
 
-		# Create viewer frame
-		if not self._viewerFrame:
-			self._viewerFrame = ColorSpeechViewerFrame(mainFrame, self._vocabulary)
+			# Create viewer frame
+			if not self._viewerFrame:
+				self._viewerFrame = ColorSpeechViewerFrame(mainFrame, self._vocabulary)
 
-		self._viewerFrame.Show()
-		self._viewerFrame.Raise()
-		self._isActive = True
+			self._viewerFrame.Show()
+			self._viewerFrame.Raise()
+			self._viewerFrame.Centre()
+			self._isActive = True
 
-		ui.message("Color Speech Viewer activated")
+			ui.message("Color Speech Viewer activated")
+			log.info("ColorSpeechViewer: Window activated successfully")
+
+			# Show confirmation popup
+			wx.CallAfter(
+				wx.MessageBox,
+				"Color Speech Viewer is now active!\n\nNavigate around and speech will be logged in the viewer window with color highlighting.",
+				"Color Speech Viewer",
+				wx.OK | wx.ICON_INFORMATION
+			)
+
+		except Exception as e:
+			log.error(f"ColorSpeechViewer: Failed to activate - {e}")
+			# Show error popup
+			wx.CallAfter(
+				wx.MessageBox,
+				f"Color Speech Viewer failed to start:\n\n{e}",
+				"Color Speech Viewer Error",
+				wx.OK | wx.ICON_ERROR
+			)
 
 	def _deactivate(self):
 		"""Deactivate the speech viewer."""
@@ -294,6 +315,12 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if self._isActive:
 			self._deactivate()
 			ui.message("Color Speech Viewer deactivated")
+			wx.CallAfter(
+				wx.MessageBox,
+				"Color Speech Viewer has been deactivated.",
+				"Color Speech Viewer",
+				wx.OK | wx.ICON_INFORMATION
+			)
 		else:
 			self._activate()
 
