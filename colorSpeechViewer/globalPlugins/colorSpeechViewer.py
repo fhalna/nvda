@@ -73,6 +73,24 @@ def _buildVocabulary() -> Dict[str, str]:
 	except ImportError:
 		pass
 
+	# Add landmark keywords
+	try:
+		import aria
+		for landmarkKey, landmarkDisplay in aria.landmarkRoles.items():
+			vocabulary[landmarkKey.lower()] = "landmark"
+			vocabulary[landmarkDisplay.lower()] = "landmark"
+	except (ImportError, AttributeError):
+		pass
+	# Fallback landmark keywords if aria module not available
+	landmarkKeywords = [
+		"banner", "navigation", "main", "complementary",
+		"contentinfo", "content info", "search", "form",
+		"landmark", "region"
+	]
+	for kw in landmarkKeywords:
+		if kw not in vocabulary:
+			vocabulary[kw] = "landmark"
+
 	return vocabulary
 
 
@@ -83,9 +101,13 @@ COLORS = {
 	"orientation": wx.Colour(180, 100, 50),  # Orange-brown for orientation
 	"current": wx.Colour(50, 150, 150),   # Teal for current
 	"name": wx.Colour(50, 150, 50),       # Green for names (inferred)
+	"landmark": wx.Colour(200, 130, 0),   # Orange for landmarks
 	"default": wx.Colour(0, 0, 0),        # Black for unknown
 	"message": wx.Colour(100, 100, 100),  # Gray for NVDA messages
 }
+
+# Background color for landmarks (light beige)
+LANDMARK_BG_COLOR = wx.Colour(255, 245, 220)
 
 
 class ColorSpeechViewerFrame(wx.Frame):
@@ -124,14 +146,21 @@ class ColorSpeechViewerFrame(wx.Frame):
 		# Add legend
 		legendSizer = wx.BoxSizer(wx.HORIZONTAL)
 		legendItems = [
-			("Role", COLORS["role"]),
-			("State", COLORS["state"]),
-			("Name", COLORS["name"]),
-			("Message", COLORS["message"]),
+			("Role", COLORS["role"], None, False),
+			("State", COLORS["state"], None, False),
+			("Name", COLORS["name"], None, True),  # Bold
+			("Landmark", COLORS["landmark"], LANDMARK_BG_COLOR, False),  # With background
+			("Message", COLORS["message"], None, False),
 		]
-		for label, color in legendItems:
+		for label, fgColor, bgColor, bold in legendItems:
 			legendText = wx.StaticText(panel, label=f" {label} ")
-			legendText.SetForegroundColour(color)
+			legendText.SetForegroundColour(fgColor)
+			if bgColor:
+				legendText.SetBackgroundColour(bgColor)
+			if bold:
+				font = legendText.GetFont()
+				font.SetWeight(wx.FONTWEIGHT_BOLD)
+				legendText.SetFont(font)
 			legendSizer.Add(legendText, flag=wx.LEFT, border=5)
 
 		sizer.Add(legendSizer, flag=wx.ALL, border=5)
@@ -188,33 +217,44 @@ class ColorSpeechViewerFrame(wx.Frame):
 		self.textCtrl.AppendText(text)
 		endPos = self.textCtrl.GetLastPosition()
 
-		# Determine color
+		# Determine text type and color
+		textType = None
 		if isMessage:
-			color = COLORS["message"]
+			textType = "message"
 		else:
 			textLower = text.lower().strip()
 			textType = self.vocabulary.get(textLower)
 
-			if textType:
-				color = COLORS.get(textType, COLORS["default"])
-			else:
-				# Check if any word in the text is a known role/state
+			if not textType:
+				# Check if any word in the text is a known role/state/landmark
 				words = textLower.split()
-				foundType = None
 				for word in words:
 					wordType = self.vocabulary.get(word)
 					if wordType:
-						foundType = wordType
+						textType = wordType
 						break
 
-				if foundType:
-					color = COLORS.get(foundType, COLORS["default"])
-				else:
-					# Assume it's a name if it's a single text segment not matching anything
-					color = COLORS["name"]
+			if not textType:
+				# Assume it's a name if it's a single text segment not matching anything
+				textType = "name"
 
-		# Apply color
+		# Get color for this type
+		color = COLORS.get(textType, COLORS["default"])
+
+		# Create text attribute with color
 		textAttr = wx.TextAttr(color)
+
+		# Apply bold for names
+		if textType == "name":
+			font = self.textCtrl.GetFont()
+			boldFont = wx.Font(font)
+			boldFont.SetWeight(wx.FONTWEIGHT_BOLD)
+			textAttr.SetFont(boldFont)
+
+		# Apply background color for landmarks
+		if textType == "landmark":
+			textAttr.SetBackgroundColour(LANDMARK_BG_COLOR)
+
 		self.textCtrl.SetStyle(startPos, endPos, textAttr)
 
 	def destroy(self):
