@@ -7,7 +7,7 @@ import globalPluginHandler
 import ui
 import wx
 import config
-from speech.extensions import pre_speechQueued, post_speechCanceled
+from speech.extensions import filter_speechSequence
 from speech.commands import SpeechCommand
 from speech.types import SpeechSequence
 import controlTypes
@@ -244,8 +244,8 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			return
 
 		try:
-			# Register for speech events
-			pre_speechQueued.register(self._onSpeechQueued)
+			# Register for speech events (using filter_speechSequence for NVDA 2024.4.x compatibility)
+			filter_speechSequence.register(self._onSpeechFilter)
 
 			# Create viewer frame
 			if not self._viewerFrame:
@@ -284,7 +284,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		# Unregister from speech events
 		try:
-			pre_speechQueued.unregister(self._onSpeechQueued)
+			filter_speechSequence.unregister(self._onSpeechFilter)
 		except Exception:
 			pass
 
@@ -298,17 +298,18 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 		self._isActive = False
 
-	def _onSpeechQueued(self, speechSequence: SpeechSequence, priority):
-		"""Handle speech queued event."""
-		if not self._isActive or not self._viewerFrame:
-			return
+	def _onSpeechFilter(self, speechSequence: SpeechSequence) -> SpeechSequence:
+		"""Filter callback for speech - logs to viewer and returns sequence unchanged."""
+		if self._isActive and self._viewerFrame:
+			# Determine if this is a simple message (no commands, just text)
+			hasCommands = any(isinstance(item, SpeechCommand) for item in speechSequence)
+			isSimpleMessage = not hasCommands and len(speechSequence) == 1
 
-		# Determine if this is a simple message (no commands, just text)
-		hasCommands = any(isinstance(item, SpeechCommand) for item in speechSequence)
-		isSimpleMessage = not hasCommands and len(speechSequence) == 1
+			# Append to viewer
+			wx.CallAfter(self._viewerFrame.appendSpeech, speechSequence, isMessage=isSimpleMessage)
 
-		# Append to viewer
-		wx.CallAfter(self._viewerFrame.appendSpeech, speechSequence, isMessage=isSimpleMessage)
+		# Filter must return the sequence (unchanged)
+		return speechSequence
 
 	def script_toggleColorSpeechViewer(self, gesture):
 		"""Toggle the Color Speech Viewer window."""
