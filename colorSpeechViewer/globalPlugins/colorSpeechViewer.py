@@ -132,14 +132,34 @@ class ColorSpeechViewerFrame(wx.Frame):
 			style=wx.TE_RICH2 | wx.TE_READONLY | wx.TE_MULTILINE | wx.TE_DONTWRAP,
 		)
 
-		# Set default font
-		font = wx.Font(
+		# Pre-create fonts ONCE for performance (avoid creating new Font objects per call)
+		self._normalFont = wx.Font(
 			10,
 			wx.FONTFAMILY_TELETYPE,
 			wx.FONTSTYLE_NORMAL,
 			wx.FONTWEIGHT_NORMAL,
 		)
-		self.textCtrl.SetFont(font)
+		self._boldFont = wx.Font(self._normalFont)
+		self._boldFont.SetWeight(wx.FONTWEIGHT_BOLD)
+		self.textCtrl.SetFont(self._normalFont)
+
+		# Pre-create ALL TextAttr objects ONCE for performance
+		self._textAttrs = {
+			"role": wx.TextAttr(COLORS["role"]),
+			"state": wx.TextAttr(COLORS["state"]),
+			"orientation": wx.TextAttr(COLORS["orientation"]),
+			"current": wx.TextAttr(COLORS["current"]),
+			"message": wx.TextAttr(COLORS["message"]),
+			"default": wx.TextAttr(COLORS["default"]),
+		}
+		# Name: green + bold
+		nameAttr = wx.TextAttr(COLORS["name"])
+		nameAttr.SetFont(self._boldFont)
+		self._textAttrs["name"] = nameAttr
+		# Landmark: orange + background
+		landmarkAttr = wx.TextAttr(COLORS["landmark"])
+		landmarkAttr.SetBackgroundColour(LANDMARK_BG_COLOR)
+		self._textAttrs["landmark"] = landmarkAttr
 
 		sizer.Add(self.textCtrl, proportion=1, flag=wx.EXPAND | wx.ALL, border=5)
 
@@ -217,7 +237,7 @@ class ColorSpeechViewerFrame(wx.Frame):
 		self.textCtrl.AppendText(text)
 		endPos = self.textCtrl.GetLastPosition()
 
-		# Determine text type and color
+		# Determine text type
 		textType = None
 		if isMessage:
 			textType = "message"
@@ -238,23 +258,8 @@ class ColorSpeechViewerFrame(wx.Frame):
 				# Assume it's a name if it's a single text segment not matching anything
 				textType = "name"
 
-		# Get color for this type
-		color = COLORS.get(textType, COLORS["default"])
-
-		# Create text attribute with color
-		textAttr = wx.TextAttr(color)
-
-		# Apply bold for names
-		if textType == "name":
-			font = self.textCtrl.GetFont()
-			boldFont = wx.Font(font)
-			boldFont.SetWeight(wx.FONTWEIGHT_BOLD)
-			textAttr.SetFont(boldFont)
-
-		# Apply background color for landmarks
-		if textType == "landmark":
-			textAttr.SetBackgroundColour(LANDMARK_BG_COLOR)
-
+		# Use pre-created TextAttr - NO new object creation for performance!
+		textAttr = self._textAttrs.get(textType, self._textAttrs["default"])
 		self.textCtrl.SetStyle(startPos, endPos, textAttr)
 
 	def destroy(self):
