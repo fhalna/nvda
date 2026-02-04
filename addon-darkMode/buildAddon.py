@@ -6,7 +6,6 @@ Creates a .nvda-addon file that can be installed via NVDA's Add-on Manager.
 
 import os
 import zipfile
-import configparser
 
 def build_addon():
     # Get the directory where this script is located
@@ -14,11 +13,17 @@ def build_addon():
 
     # Read manifest to get add-on name and version
     manifest_path = os.path.join(addon_dir, "manifest.ini")
-    config = configparser.ConfigParser()
-    config.read(manifest_path)
 
-    name = config.get("General", "name", fallback="darkMode")
-    version = config.get("General", "version", fallback="1.0.0")
+    name = "darkMode"
+    version = "1.0.0"
+
+    with open(manifest_path, "r") as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("name"):
+                name = line.split("=", 1)[1].strip()
+            elif line.startswith("version"):
+                version = line.split("=", 1)[1].strip()
 
     # Output filename
     output_filename = f"{name}-{version}.nvda-addon"
