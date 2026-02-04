@@ -36,7 +36,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 
 	@script(
 		description="Toggle Dark Mode (screen curtain with visible focus)",
-		gesture="kb:NVDA+shift+c",
+		gesture="kb:NVDA+shift+f6",
 	)
 	def script_toggleDarkMode(self, gesture):
 		"""Toggle the Dark Mode screen curtain on or off."""
