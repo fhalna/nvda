@@ -141,9 +141,12 @@ class DarkModeOverlay:
 	def _run(self):
 		"""Thread main function - creates window and runs message loop."""
 		try:
+			log.info("Dark Mode: Starting overlay thread")
+
 			# Create brushes
 			self._brush_black = gdi32.CreateSolidBrush(0x00000000)  # Black
 			self._brush_transparent = gdi32.CreateSolidBrush(TRANSPARENT_COLOR)
+			log.info(f"Dark Mode: Created brushes - black={self._brush_black}, transparent={self._brush_transparent}")
 
 			# Register window class
 			self._wndproc = WNDPROC(self._window_proc)
@@ -158,8 +161,10 @@ class DarkModeOverlay:
 
 			atom = user32.RegisterClassExW(byref(wc))
 			if not atom:
-				log.error("Failed to register window class")
+				error = ctypes.get_last_error()
+				log.error(f"Dark Mode: Failed to register window class, error={error}")
 				return
+			log.info(f"Dark Mode: Registered window class, atom={atom}")
 
 			# Get screen dimensions
 			screen_width = user32.GetSystemMetrics(0)  # SM_CXSCREEN
@@ -170,6 +175,7 @@ class DarkModeOverlay:
 			top = user32.GetSystemMetrics(77)  # SM_YVIRTUALSCREEN
 			width = user32.GetSystemMetrics(78)  # SM_CXVIRTUALSCREEN
 			height = user32.GetSystemMetrics(79)  # SM_CYVIRTUALSCREEN
+			log.info(f"Dark Mode: Screen dimensions - left={left}, top={top}, width={width}, height={height}")
 
 			# Create window
 			ex_style = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
@@ -187,8 +193,10 @@ class DarkModeOverlay:
 			)
 
 			if not self._hwnd:
-				log.error("Failed to create window")
+				error = ctypes.get_last_error()
+				log.error(f"Dark Mode: Failed to create window, error={error}")
 				return
+			log.info(f"Dark Mode: Created window, hwnd={self._hwnd}")
 
 			# Set layered window attributes - make magenta transparent
 			user32.SetLayeredWindowAttributes(self._hwnd, TRANSPARENT_COLOR, 255, LWA_COLORKEY)
