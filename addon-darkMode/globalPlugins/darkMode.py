@@ -47,9 +47,10 @@ SWP_NOACTIVATE = 0x0010
 SWP_NOMOVE = 0x0002
 SWP_NOSIZE = 0x0001
 
-# User32 functions
+# User32 and kernel32 functions
 user32 = windll.user32
 gdi32 = windll.gdi32
+kernel32 = windll.kernel32
 
 # Window class structure
 WNDPROC = WINFUNCTYPE(c_int, HWND, UINT, WPARAM, LPARAM)
@@ -155,7 +156,7 @@ class DarkModeOverlay:
 			wc.cbSize = ctypes.sizeof(WNDCLASSEX)
 			wc.style = CS_HREDRAW | CS_VREDRAW
 			wc.lpfnWndProc = self._wndproc
-			wc.hInstance = user32.GetModuleHandleW(None)
+			wc.hInstance = kernel32.GetModuleHandleW(None)
 			wc.hbrBackground = self._brush_black
 			wc.lpszClassName = "NVDADarkModeOverlay"
 
@@ -188,7 +189,7 @@ class DarkModeOverlay:
 				style,
 				left, top, width, height - 1,  # -1 to allow desktop shortcuts
 				None, None,
-				user32.GetModuleHandleW(None),
+				kernel32.GetModuleHandleW(None),
 				None
 			)
 
@@ -225,7 +226,7 @@ class DarkModeOverlay:
 			# Cleanup
 			user32.KillTimer(self._hwnd, 1)
 			user32.DestroyWindow(self._hwnd)
-			user32.UnregisterClassW("NVDADarkModeOverlay", user32.GetModuleHandleW(None))
+			user32.UnregisterClassW("NVDADarkModeOverlay", kernel32.GetModuleHandleW(None))
 
 			if self._brush_black:
 				gdi32.DeleteObject(self._brush_black)
