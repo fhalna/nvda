@@ -86,6 +86,9 @@ class PAINTSTRUCT(ctypes.Structure):
 # Transparent color (magenta - will be the "hole")
 TRANSPARENT_COLOR = 0x00FF00FF  # BGR format: magenta
 
+# For SetLayeredWindowAttributes - need RGB format
+TRANSPARENT_COLOR_RGB = 0x00FF00FF  # RGB: magenta
+
 # Highlight colors (BGR format for Windows)
 COLOR_FOCUS = 0x00FF3603  # Blue
 COLOR_NAVIGATOR = 0x006602FF  # Pink
@@ -200,7 +203,9 @@ class DarkModeOverlay:
 			log.info(f"Dark Mode: Created window, hwnd={self._hwnd}")
 
 			# Set layered window attributes - make magenta transparent
-			user32.SetLayeredWindowAttributes(self._hwnd, TRANSPARENT_COLOR, 255, LWA_COLORKEY)
+			# Note: SetLayeredWindowAttributes uses RGB format (not BGR)
+			result = user32.SetLayeredWindowAttributes(self._hwnd, TRANSPARENT_COLOR, 0, LWA_COLORKEY)
+			log.info(f"Dark Mode: SetLayeredWindowAttributes result={result}")
 
 			# Set up timer for refresh (100ms)
 			user32.SetTimer(self._hwnd, 1, 100, None)
@@ -315,9 +320,16 @@ class DarkModeOverlay:
 				else:
 					self._current_rect = None
 
-			# Force repaint
+			# Force repaint and ensure window stays on top
 			if self._hwnd:
 				user32.InvalidateRect(self._hwnd, None, True)
+				# Re-assert topmost status
+				user32.SetWindowPos(
+					self._hwnd,
+					HWND_TOPMOST,
+					0, 0, 0, 0,
+					SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+				)
 
 		except Exception:
 			pass  # Ignore errors during timer
