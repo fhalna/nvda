@@ -83,11 +83,9 @@ class PAINTSTRUCT(ctypes.Structure):
 	]
 
 
-# Transparent color (magenta - will be the "hole")
-TRANSPARENT_COLOR = 0x00FF00FF  # BGR format: magenta
-
-# For SetLayeredWindowAttributes - need RGB format
-TRANSPARENT_COLOR_RGB = 0x00FF00FF  # RGB: magenta
+# Transparent color - use a unique magenta color
+# COLORREF format is 0x00BBGGRR
+TRANSPARENT_COLOR = 0x00FF00FF  # Magenta: B=255, G=0, R=255
 
 # Highlight colors (BGR format for Windows)
 COLOR_FOCUS = 0x00FF3603  # Blue
@@ -284,16 +282,23 @@ class DarkModeOverlay:
 				focus_rect.right = self._current_rect[2] - left
 				focus_rect.bottom = self._current_rect[3] - top
 
+				# Add padding to make the hole slightly larger
+				padding = 5
+				focus_rect.left -= padding
+				focus_rect.top -= padding
+				focus_rect.right += padding
+				focus_rect.bottom += padding
+
 				# Fill focus area with transparent color (creates the hole)
-				user32.FillRect(hdc, byref(focus_rect), self._brush_transparent)
+				result = user32.FillRect(hdc, byref(focus_rect), self._brush_transparent)
 
 				# Draw border around the focus area
 				pen = gdi32.CreatePen(0, 3, self._current_color)  # PS_SOLID, 3px width
 				old_pen = gdi32.SelectObject(hdc, pen)
 				old_brush = gdi32.SelectObject(hdc, gdi32.GetStockObject(5))  # NULL_BRUSH
 
-				gdi32.Rectangle(hdc, focus_rect.left - 3, focus_rect.top - 3,
-								focus_rect.right + 3, focus_rect.bottom + 3)
+				gdi32.Rectangle(hdc, focus_rect.left, focus_rect.top,
+								focus_rect.right, focus_rect.bottom)
 
 				gdi32.SelectObject(hdc, old_pen)
 				gdi32.SelectObject(hdc, old_brush)
