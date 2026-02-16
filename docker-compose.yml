@@ -14,7 +14,28 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  # ─── Mode 2 : Démo autonome (mock NVDA) ────────────────────────────
+  # ─── Mode 2 : Navigateur / Restitution ─────────────────────────────
+  # Parcourt une page RÉELLE via NVDA (MCP server + bridge) et produit
+  # un fichier texte de restitution complète.
+  #
+  # Pré-requis : le service mcp-server doit tourner.
+  #
+  #   docker compose up mcp-server
+  #   docker compose run --rm navigator https://www.tanaguru.com
+  #   docker compose run --rm navigator https://www.tanaguru.com -o /output/restitution.txt
+  #
+  navigator:
+    build: .
+    entrypoint: ["python", "-m", "nvda_mcp.navigator"]
+    depends_on:
+      - mcp-server
+    environment:
+      - MCP_URL=http://mcp-server:8080/sse
+    volumes:
+      - ./output:/output
+    profiles: ["nav"]
+
+  # ─── Mode 3 : Démo autonome (mock NVDA) ────────────────────────────
   # Parcourt une page HTML via le parseur NVDA simulé + mock bridge + MCP.
   # Aucune dépendance externe. Parfait pour tester le pipeline.
   #
@@ -26,7 +47,7 @@ services:
     entrypoint: ["python", "-m", "nvda_mcp.demo_browse"]
     profiles: ["demo"]
 
-  # ─── Mode 3 : Parseur HTML → NVDA seul ─────────────────────────────
+  # ─── Mode 4 : Parseur HTML → NVDA seul ─────────────────────────────
   # Convertit le HTML d'une URL en sortie NVDA browse mode.
   #
   #   docker compose run --rm parse https://www.example.com
