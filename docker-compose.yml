@@ -1,0 +1,37 @@
+services:
+  # ─── Mode 1 : Serveur MCP (SSE) ────────────────────────────────────
+  # Démarre le serveur MCP en mode SSE, connecté à un NVDA réel sur l'hôte.
+  #
+  #   docker compose up mcp-server
+  #
+  # Le client AI se connecte ensuite sur http://localhost:8080/sse
+  mcp-server:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - NVDA_BRIDGE_URL=http://host.docker.internal:8765
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ─── Mode 2 : Démo autonome (mock NVDA) ────────────────────────────
+  # Parcourt une page HTML via le parseur NVDA simulé + mock bridge + MCP.
+  # Aucune dépendance externe. Parfait pour tester le pipeline.
+  #
+  #   docker compose run --rm demo
+  #   docker compose run --rm demo https://www.example.com
+  #
+  demo:
+    build: .
+    entrypoint: ["python", "-m", "nvda_mcp.demo_browse"]
+    profiles: ["demo"]
+
+  # ─── Mode 3 : Parseur HTML → NVDA seul ─────────────────────────────
+  # Convertit le HTML d'une URL en sortie NVDA browse mode.
+  #
+  #   docker compose run --rm parse https://www.example.com
+  #
+  parse:
+    build: .
+    entrypoint: ["python", "-m", "nvda_mcp.html_to_nvda"]
+    profiles: ["tools"]

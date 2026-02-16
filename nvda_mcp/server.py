@@ -378,13 +378,18 @@ def main():
 		default=3000,
 		help="Port for SSE transport (default: 3000)",
 	)
+	parser.add_argument(
+		"--host",
+		default="localhost",
+		help="Host for SSE transport (default: localhost)",
+	)
 	args = parser.parse_args()
 
 	global _client
 	_client = NVDABridgeClient(args.bridge_url)
 
 	if args.transport == "sse":
-		mcp.run(transport="sse", sse_params={"port": args.port})
+		mcp.run(transport="sse", sse_params={"host": args.host, "port": args.port})
 	else:
 		mcp.run(transport="stdio")
 

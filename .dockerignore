@@ -1,0 +1,5 @@
+# Everything except nvda_mcp
+*
+!nvda_mcp/
+nvda_mcp/__pycache__/
+nvda_mcp/*.pyc
