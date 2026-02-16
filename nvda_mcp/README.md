@@ -2,62 +2,100 @@
 
 Serveur [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) pour piloter le lecteur d'écran [NVDA](https://www.nvaccess.org/) depuis une IA.
 
+## Pré-requis
+
+> **NVDA est un lecteur d'écran Windows.** Il nécessite un poste Windows
+> avec un bureau graphique. Il ne tourne pas sous Linux, pas dans un
+> conteneur, et pas sans affichage.
+
+| Composant | Requis | Détail |
+|-----------|--------|--------|
+| **Windows** | 10 / 11 | Bureau graphique actif (pas de session headless) |
+| **NVDA** | ≥ 2024.1 | [Télécharger](https://www.nvaccess.org/download/) |
+| **Firefox** | ≥ 115 ESR | **Seul navigateur pleinement supporté** par NVDA (IAccessible2). Chrome a un support UIA partiel et incomplet. Edge/Safari ne sont pas supportés. |
+| **Python** | ≥ 3.10 | Pour le serveur MCP et le navigateur |
+
+### Pourquoi Firefox ?
+
+NVDA interagit avec les navigateurs via des APIs d'accessibilité :
+
+- **Firefox** : Implémente IAccessible2 (IA2), l'API que NVDA utilise nativement. Le mode navigation (browse mode), le curseur virtuel, et toutes les commandes rapides (H, K, D, F, T, G…) fonctionnent pleinement.
+- **Chrome/Edge** : Support partiel via UIA. Certaines fonctionnalités manquent ou sont instables. Non recommandé pour l'audit.
+- **Autres** : Non supportés.
+
 ## Architecture
 
-Le système est composé de deux parties :
-
-1. **Plugin NVDA** (`nvda_global_plugin/nvdaMCPBridge.py`) — Tourne à l'intérieur de NVDA et expose une API HTTP locale (port 8765) donnant accès à toutes les APIs internes de NVDA.
-
-2. **Serveur MCP** (`server.py`) — Processus standalone qui se connecte au plugin bridge et expose les capacités de NVDA comme des outils MCP (transport stdio ou SSE).
-
 ```
-┌──────────────┐    stdio/SSE    ┌──────────────┐   HTTP (localhost)  ┌──────────┐
-│   Client IA  │ ◄────────────► │  Serveur MCP │ ◄──────────────────► │   NVDA   │
-│ (Claude, etc)│                │  (nvda_mcp)  │                     │ (bridge) │
-└──────────────┘                └──────────────┘                     └──────────┘
+┌─────────────────────── Poste Windows ───────────────────────┐
+│                                                             │
+│  ┌──────────┐    IAccessible2    ┌──────────┐              │
+│  │ Firefox  │ ◄────────────────► │   NVDA   │              │
+│  │ (page)   │                    │          │              │
+│  └──────────┘                    │  bridge  │──┐           │
+│                                  │  plugin  │  │ HTTP      │
+│                                  └──────────┘  │ :8765     │
+│                                                │           │
+│                                  ┌──────────┐  │           │
+│                                  │ Serveur  │◄─┘           │
+│                                  │   MCP    │              │
+│                                  │(nvda_mcp)│              │
+│                                  └────┬─────┘              │
+│                                       │ stdio / SSE        │
+└───────────────────────────────────────┼─────────────────────┘
+                                        │
+                               ┌────────┴────────┐
+                               │   Client IA     │
+                               │ (Claude, script, │
+                               │  navigator.py)  │
+                               └─────────────────┘
 ```
+
+**Tout tourne sur le même poste Windows** (ou le client IA peut être distant via SSE).
 
 ## Installation
 
-### 1. Plugin NVDA (bridge)
+### Étape 1 : Installer le plugin NVDA (bridge)
 
-Copier le fichier du plugin dans le répertoire globalPlugins de NVDA :
+Le bridge est un global plugin NVDA qui expose une API HTTP locale.
 
-```bash
-copy nvda_global_plugin\nvdaMCPBridge.py %APPDATA%\nvda\globalPlugins\
+```cmd
+:: Copier le plugin dans NVDA
+copy nvda_global_plugin\nvdaMCPBridge.py "%APPDATA%\nvda\globalPlugins\"
+
+:: Redémarrer NVDA (le bridge démarre automatiquement sur 127.0.0.1:8765)
 ```
 
-Puis redémarrer NVDA. Le bridge HTTP démarre automatiquement sur `127.0.0.1:8765`.
+Vérifier que le bridge fonctionne :
 
-### 2. Serveur MCP
+```cmd
+curl http://127.0.0.1:8765/health
+:: Doit retourner : {"status": "ok", "version": "2025.1"}
+```
 
-```bash
+### Étape 2 : Installer le serveur MCP
+
+```cmd
+cd nvda_mcp
 pip install -e .
 ```
 
-Ou directement :
+Ou juste la dépendance :
 
-```bash
+```cmd
 pip install mcp
 ```
 
+### Étape 3 : Configurer Firefox
+
+1. Ouvrir Firefox
+2. S'assurer qu'il est le navigateur au premier plan
+3. NVDA doit annoncer "Firefox" quand on alt-tab vers lui
+
 ## Utilisation
 
-### Lancer le serveur MCP (stdio)
+### Mode 1 : Claude Desktop (stdio)
 
-```bash
-python -m nvda_mcp
-```
-
-### Lancer avec SSE (accès réseau)
-
-```bash
-python -m nvda_mcp --transport sse --port 3000
-```
-
-### Configuration Claude Desktop
-
-Ajouter dans `claude_desktop_config.json` :
+Ajouter dans `%APPDATA%\Claude\claude_desktop_config.json` :
 
 ```json
 {
@@ -70,13 +108,80 @@ Ajouter dans `claude_desktop_config.json` :
 }
 ```
 
+Claude peut alors piloter NVDA directement :
+> "Navigue vers tanaguru.com et lis-moi les titres de la page"
+
+### Mode 2 : Serveur SSE (accès réseau ou script)
+
+```cmd
+python -m nvda_mcp --transport sse --port 8080
+```
+
+Le serveur MCP est accessible sur `http://localhost:8080/sse`.
+
+### Mode 3 : Navigator — Parcours automatisé avec restitution
+
+Le navigator est un vrai client MCP qui pilote NVDA comme un utilisateur aveugle :
+
+```cmd
+:: Démarrer le serveur MCP
+python -m nvda_mcp --transport sse --port 8080
+
+:: Parcourir une page et produire le fichier de restitution
+python -m nvda_mcp.navigator https://www.tanaguru.com -o restitution.txt
+```
+
+Le navigator exécute cette séquence de commandes NVDA :
+
+| Étape | Touche NVDA | Action |
+|-------|-------------|--------|
+| 1 | `Ctrl+L` | Ouvrir la barre d'adresse Firefox |
+| 2 | `Ctrl+V` + `Entrée` | Coller l'URL et charger la page |
+| 3 | `Ctrl+Home` | Revenir en haut de page |
+| 4 | `D` (répété) | Parcourir tous les **repères** (landmarks) |
+| 5 | `H` (répété) | Parcourir tous les **titres** (headings) |
+| 6 | `↓` (répété) | Lire la page **ligne par ligne** |
+| 7 | `K` (répété) | Parcourir tous les **liens** |
+| 8 | `F` (répété) | Parcourir tous les **champs de formulaire** |
+| 9 | `G` (répété) | Parcourir toutes les **images** |
+| 10 | `T` (répété) | Parcourir tous les **tableaux** |
+
+Options du navigator :
+
+```
+python -m nvda_mcp.navigator URL [options]
+  -o FILE       Fichier de sortie (défaut : stdout)
+  --mcp-url     URL du serveur MCP (défaut : http://localhost:8080/sse)
+  --skip-nav    Ne pas naviguer vers l'URL (page déjà ouverte)
+  --delay 0.5   Délai entre les commandes (défaut : 0.3s)
+```
+
 ### Variable d'environnement
 
-Si le bridge tourne sur un port différent :
-
-```bash
+```cmd
 set NVDA_BRIDGE_URL=http://127.0.0.1:9999
 python -m nvda_mcp
+```
+
+## Docker (serveur MCP uniquement)
+
+Le conteneur Docker ne contient que le **serveur MCP**. NVDA + Firefox doivent tourner sur le poste Windows hôte.
+
+```
+┌──── Docker ─────┐         ┌──── Windows (hôte) ────┐
+│  Serveur MCP    │◄───────►│  NVDA + Bridge (:8765)  │
+│  :8080 (SSE)    │  HTTP   │  Firefox                │
+└─────────────────┘         └─────────────────────────┘
+```
+
+```bash
+docker compose up mcp-server
+```
+
+Pour le navigator via Docker :
+
+```bash
+docker compose run --rm --profile nav navigator https://www.tanaguru.com -o /output/restitution.txt
 ```
 
 ## Outils MCP disponibles
@@ -125,27 +230,44 @@ python -m nvda_mcp
 | `get_nvda_version` | Version de NVDA |
 | `check_connection` | Vérifier la connexion au bridge |
 
-## Exemples d'utilisation par l'IA
+## Exemple de restitution
+
+Voici un extrait du fichier produit par le navigator :
 
 ```
-# Comprendre ce qui est à l'écran
-get_focus()           → [bouton] "OK" states=[focalisé]
-get_foreground()      → [fenêtre] "Bloc-notes" app=notepad
-get_object_tree()     → arbre hiérarchique des éléments
+========================================================================
+  RESTITUTION NVDA — https://www.tanaguru.com
+  Date : 2025-06-15 14:32:01
+  NVDA : NVDA version 2025.1
+  Durée du parcours : 45.2s
+========================================================================
 
-# Naviguer dans l'interface
-move_navigator("firstChild")
-move_navigator("next")
-activate_object()
+------------------------------------------------------------------------
+  REPÈRES / LANDMARKS (4)
+  Navigation : touche D
+------------------------------------------------------------------------
+    1. bannière  repère
+    2. navigation  repère
+    3. contenu principal  repère
+    4. informations de contenu  repère
 
-# Lire du contenu
-review_current_line() → "Ligne de texte courante"
-get_status_bar()      → "Ln 1, Col 1"
+------------------------------------------------------------------------
+  TITRES / HEADINGS (8)
+  Navigation : touche H
+------------------------------------------------------------------------
+    1. titre de niveau 1  L'accessibilité numérique, simplement
+    2. titre de niveau 2  Nos services
+    3. titre de niveau 3  Audit
+    ...
 
-# Interagir
-send_keys("control+a")    # Tout sélectionner
-send_keys("control+c")    # Copier
-speak("Opération terminée")
+------------------------------------------------------------------------
+  PARCOURS COMPLET — LIGNE PAR LIGNE (97 lignes)
+  Navigation : flèche bas (downArrow)
+------------------------------------------------------------------------
+    1. lien Aller au contenu
+    2. bannière  repère
+    3. lien graphique  logo Tanaguru
+    ...
 ```
 
 ## Sécurité
