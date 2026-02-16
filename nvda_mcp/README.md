@@ -54,16 +54,40 @@ NVDA interagit avec les navigateurs via des APIs d'accessibilité :
 
 ## Installation
 
-### Étape 1 : Installer le plugin NVDA (bridge)
+### Étape 1 : Installer l'addon NVDA (bridge)
 
-Le bridge est un global plugin NVDA qui expose une API HTTP locale.
+Le bridge est un addon NVDA qui expose une API HTTP locale.
+
+**Option A : Installer l'addon pré-construit (recommandé)**
 
 ```cmd
-:: Copier le plugin dans NVDA
-copy nvda_global_plugin\nvdaMCPBridge.py "%APPDATA%\nvda\globalPlugins\"
+:: Construire l'addon
+cd nvda_mcp
+python build_addon.py
 
-:: Redémarrer NVDA (le bridge démarre automatiquement sur 127.0.0.1:8765)
+:: Double-cliquer sur le fichier .nvda-addon généré (NVDA doit être lancé)
+:: NVDA demandera confirmation → accepter → redémarrer NVDA
+start nvdaMCPBridge-0.1.0.nvda-addon
 ```
+
+**Option B : Installer manuellement**
+
+```cmd
+:: Créer le dossier addon dans NVDA
+mkdir "%APPDATA%\nvda\addons\nvdaMCPBridge"
+mkdir "%APPDATA%\nvda\addons\nvdaMCPBridge\globalPlugins"
+mkdir "%APPDATA%\nvda\addons\nvdaMCPBridge\globalPlugins\nvdaMCPBridge"
+
+:: Copier les fichiers
+copy addon\manifest.ini "%APPDATA%\nvda\addons\nvdaMCPBridge\"
+copy addon\globalPlugins\nvdaMCPBridge\__init__.py "%APPDATA%\nvda\addons\nvdaMCPBridge\globalPlugins\nvdaMCPBridge\"
+
+:: Redémarrer NVDA
+```
+
+> **Note :** Ne PAS copier le fichier directement dans `%APPDATA%\nvda\globalPlugins\`.
+> Ce dossier n'est scanné que si l'option développeur "scratchpad" est activée.
+> Les addons dans `%APPDATA%\nvda\addons\` sont toujours chargés.
 
 Vérifier que le bridge fonctionne :
 
