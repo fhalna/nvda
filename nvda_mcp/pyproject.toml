@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "nvda-mcp"
+version = "0.1.0"
+description = "MCP server for controlling NVDA screen reader"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-2.0-or-later"
+dependencies = [
+    "mcp>=1.0.0",
+]
+
+[project.scripts]
+nvda-mcp = "nvda_mcp.server:main"
