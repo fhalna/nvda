@@ -30,13 +30,16 @@ from html.parser import HTMLParser
 LANDMARK_ROLES: dict[str, str] = {
 	"banner": "bannière",
 	"navigation": "navigation",
-	"main": "contenu principal",
-	"contentinfo": "informations de contenu",
+	"main": "principale",
+	"contentinfo": "information sur le contenu",
 	"complementary": "complémentaire",
 	"search": "recherche",
 	"form": "formulaire",
 	"region": "région",
 }
+
+# controlTypes.Role.LANDMARK.displayString in French = "région"
+LANDMARK_DISPLAY = "région"
 
 # Other ARIA widget / document / structure roles
 ARIA_ROLE_LABELS: dict[str, str] = {
@@ -46,12 +49,12 @@ ARIA_ROLE_LABELS: dict[str, str] = {
 	"application": "application",
 	"button": "bouton",
 	"checkbox": "case à cocher",
-	"combobox": "zone de liste déroulante",
+	"combobox": "liste déroulante",
 	"dialog": "dialogue",
 	"grid": "grille",
 	"gridcell": "cellule de grille",
 	"link": "lien",
-	"listbox": "zone de liste",
+	"listbox": "liste",
 	"log": "journal",
 	"marquee": "défilement",
 	"menu": "menu",
@@ -65,14 +68,14 @@ ARIA_ROLE_LABELS: dict[str, str] = {
 	"radiogroup": "groupe de boutons radio",
 	"scrollbar": "barre de défilement",
 	"separator": "séparateur",
-	"slider": "curseur",
+	"slider": "potentiomètre",
 	"spinbutton": "bouton rotatif",
-	"status": "état",
-	"switch": "interrupteur",
+	"status": "barre d'état",
+	"switch": "bascule",
 	"tab": "onglet",
-	"tablist": "liste d'onglets",
-	"tabpanel": "panneau d'onglet",
-	"textbox": "zone d'édition",
+	"tablist": "onglet",
+	"tabpanel": "page de propriété",
+	"textbox": "édition",
 	"timer": "minuteur",
 	"toolbar": "barre d'outils",
 	"tooltip": "infobulle",
@@ -152,17 +155,17 @@ INLINE_ELEMENTS = {
 
 _ARIA_STATE_ANNOUNCEMENTS: dict[str, dict[str, str]] = {
 	"aria-expanded": {"true": "développé", "false": "réduit"},
-	"aria-checked": {"true": "coché", "false": "non coché", "mixed": "partiellement coché"},
+	"aria-checked": {"true": "coché", "false": "non coché", "mixed": "semi-coché"},
 	"aria-selected": {"true": "sélectionné", "false": "non sélectionné"},
-	"aria-pressed": {"true": "enfoncé", "false": "non enfoncé", "mixed": "partiellement enfoncé"},
-	"aria-disabled": {"true": "indisponible"},
-	"aria-required": {"true": "requis"},
-	"aria-invalid": {"true": "non valide", "grammar": "erreur de grammaire", "spelling": "erreur d'orthographe"},
+	"aria-pressed": {"true": "enfoncé", "false": "non enfoncé", "mixed": "à moitié enfoncé"},
+	"aria-disabled": {"true": "non disponible"},
+	"aria-required": {"true": "obligatoire"},
+	"aria-invalid": {"true": "entrée invalide", "grammar": "erreur de grammaire", "spelling": "erreur d'orthographe"},
 	"aria-current": {
-		"true": "actuel",
-		"page": "page actuelle",
-		"step": "étape actuelle",
-		"location": "emplacement actuel",
+		"true": "en cours",
+		"page": "page courante",
+		"step": "étape courante",
+		"location": "position courante",
 		"date": "date actuelle",
 		"time": "heure actuelle",
 	},
@@ -174,7 +177,7 @@ _ARIA_STATE_ANNOUNCEMENTS: dict[str, dict[str, str]] = {
 		"tree": "ouvre une arborescence",
 		"grid": "ouvre une grille",
 	},
-	"aria-readonly": {"true": "lecture seule"},
+	"aria-readonly": {"true": "en lecture seule"},
 	"aria-busy": {"true": "occupé"},
 	"aria-grabbed": {"true": "attrapé", "false": "peut être attrapé"},
 	"aria-dropeffect": {
@@ -190,9 +193,9 @@ _ARIA_STATE_ANNOUNCEMENTS: dict[str, dict[str, str]] = {
 		"other": "trié",
 	},
 	"aria-autocomplete": {
-		"inline": "auto-complétion en ligne",
-		"list": "auto-complétion par liste",
-		"both": "auto-complétion en ligne et par liste",
+		"inline": "autocomplétion",
+		"list": "autocomplétion",
+		"both": "autocomplétion",
 	},
 	"aria-orientation": {
 		"horizontal": "horizontal",
@@ -204,22 +207,22 @@ _ARIA_STATE_ANNOUNCEMENTS: dict[str, dict[str, str]] = {
 
 # Input type → French label used by NVDA
 _INPUT_TYPE_LABELS: dict[str, str] = {
-	"text": "zone d'édition",
-	"email": "zone d'édition de courriel",
-	"url": "zone d'édition d'URL",
-	"tel": "zone d'édition de téléphone",
-	"password": "zone d'édition de mot de passe",
-	"number": "zone d'édition de nombre",
-	"search": "zone d'édition de recherche",
-	"date": "zone d'édition de date",
-	"time": "zone d'édition d'heure",
-	"datetime-local": "zone d'édition de date et heure",
-	"month": "zone d'édition de mois",
-	"week": "zone d'édition de semaine",
-	"color": "sélecteur de couleur",
-	"range": "curseur",
-	"file": "bouton parcourir",
-	"hidden": "",  # never announced
+	"text": "édition",
+	"email": "édition",
+	"url": "édition",
+	"tel": "édition",
+	"password": "édition du mot de passe",
+	"number": "édition",
+	"search": "édition",
+	"date": "édition",
+	"time": "édition",
+	"datetime-local": "édition",
+	"month": "édition",
+	"week": "édition",
+	"color": "bouton",
+	"range": "potentiomètre",
+	"file": "bouton",
+	"hidden": "",
 }
 
 
@@ -461,13 +464,11 @@ class NVDABrowseModeParser(HTMLParser):
 		landmark = self._get_landmark_role(tag, attrs)
 		if landmark:
 			self._flush_line()
-			role_name = LANDMARK_ROLES.get(landmark, landmark)
-			aria_label = self._get_accessible_name(tag, attrs)
-			if aria_label:
-				self.lines.append(f"{aria_label}  {role_name}  repère")
-			else:
-				self.lines.append(f"{role_name}  repère")
-			self._landmark_stack.append(role_name)
+			landmark_type = LANDMARK_ROLES.get(landmark, landmark)
+			# NVDA format: "{landmarkType} région"
+			# For CARET reason (line nav), name is NOT announced
+			self.lines.append(f"{landmark_type} {LANDMARK_DISPLAY}")
+			self._landmark_stack.append(landmark_type)
 
 		# --- Block elements cause line breaks ---
 		if tag in BLOCK_ELEMENTS:
@@ -507,11 +508,11 @@ class NVDABrowseModeParser(HTMLParser):
 			elif alt is None:
 				# No alt attribute at all – NVDA announces the src
 				src = attrs.get("src", "")
-				self._add_text(f"graphique  {src}")
+				self._add_text(f"graphique {src}")
 			elif alt == "":
 				pass  # explicitly decorative
 			else:
-				self._add_text(f"graphique  {alt}")
+				self._add_text(f"graphique {alt}")
 				self._announce_description(attrs)
 
 		# --- Lists ---
@@ -721,7 +722,7 @@ class NVDABrowseModeParser(HTMLParser):
 				parts.append(label)
 			parts.append(role_label)
 			parts.extend(states)
-			self.lines.append("  ".join(parts))
+			self.lines.append(" ".join(parts))
 			return
 
 		# Tab / treeitem / menuitem: inline announcement
@@ -740,7 +741,7 @@ class NVDABrowseModeParser(HTMLParser):
 			aria_setsize = attrs.get("aria-setsize", "")
 			if aria_posinset and aria_setsize:
 				parts.append(f"{aria_posinset} sur {aria_setsize}")
-			self._add_text("  ".join(parts))
+			self._add_text(" ".join(parts))
 			return
 
 		# Dialog-like
@@ -750,7 +751,7 @@ class NVDABrowseModeParser(HTMLParser):
 			if label:
 				parts.append(label)
 			parts.extend(states)
-			self.lines.append("  ".join(parts))
+			self.lines.append(" ".join(parts))
 			return
 
 		# Slider / spinbutton / progressbar / scrollbar: value-bearing
@@ -762,19 +763,20 @@ class NVDABrowseModeParser(HTMLParser):
 			if value_text:
 				parts.append(value_text)
 			parts.extend(states)
-			self._add_text("  ".join(parts))
+			self._add_text(" ".join(parts))
 			return
 
 		# Switch
 		if role == "switch":
 			self._flush_line()
-			parts = ["interrupteur"]
+			parts = []
 			if label:
 				parts.append(label)
+			parts.append("bascule")
 			checked = attrs.get("aria-checked", "false")
 			parts.append("activé" if checked == "true" else "désactivé")
 			parts.extend(s for s in states if s not in ("coché", "non coché"))
-			self._add_text("  ".join(parts))
+			self._add_text(" ".join(parts))
 			return
 
 		# Tooltip
@@ -783,7 +785,7 @@ class NVDABrowseModeParser(HTMLParser):
 			parts = ["infobulle"]
 			if label:
 				parts.append(label)
-			self._add_text("  ".join(parts))
+			self._add_text(" ".join(parts))
 			return
 
 		# Tabpanel
@@ -792,7 +794,7 @@ class NVDABrowseModeParser(HTMLParser):
 			parts = ["panneau d'onglet"]
 			if label:
 				parts.append(label)
-			self.lines.append("  ".join(parts))
+			self.lines.append(" ".join(parts))
 			return
 
 		# Application
@@ -801,7 +803,7 @@ class NVDABrowseModeParser(HTMLParser):
 			parts = ["application"]
 			if label:
 				parts.append(label)
-			self.lines.append("  ".join(parts))
+			self.lines.append(" ".join(parts))
 			return
 
 		# Figure
@@ -823,7 +825,7 @@ class NVDABrowseModeParser(HTMLParser):
 		# Img role
 		if role == "img":
 			if label:
-				self._add_text(f"graphique  {label}")
+				self._add_text(f"graphique {label}")
 			return
 
 		# Combobox / listbox / textbox
@@ -833,7 +835,7 @@ class NVDABrowseModeParser(HTMLParser):
 			if label:
 				parts.append(label)
 			parts.extend(states)
-			self._add_text("  ".join(parts))
+			self._add_text(" ".join(parts))
 			return
 
 		# Generic: announce role label + accessible name + states
@@ -843,7 +845,7 @@ class NVDABrowseModeParser(HTMLParser):
 				parts.append(label)
 			parts.extend(states)
 			if parts:
-				self._add_text("  ".join(parts))
+				self._add_text(" ".join(parts))
 
 	# ------------------------------------------------------------------
 	# Text formatting (inline semantic tags)
@@ -854,7 +856,7 @@ class NVDABrowseModeParser(HTMLParser):
 			"strong": "gras", "b": "gras",
 			"em": "italique", "i": "italique",
 			"u": "souligné",
-			"s": "barré", "del": "supprimé", "ins": "inséré",
+			"s": "barré", "del": "effacé", "ins": "inséré",
 			"code": "code", "kbd": "clavier", "samp": "exemple",
 			"var": "variable",
 			"mark": "surligné",
@@ -870,7 +872,7 @@ class NVDABrowseModeParser(HTMLParser):
 			"strong": "gras", "b": "gras",
 			"em": "italique", "i": "italique",
 			"u": "souligné",
-			"s": "barré", "del": "supprimé", "ins": "inséré",
+			"s": "barré", "del": "effacé", "ins": "inséré",
 			"code": "code", "kbd": "clavier", "samp": "exemple",
 			"var": "variable",
 			"mark": "surligné",
@@ -890,12 +892,12 @@ class NVDABrowseModeParser(HTMLParser):
 		states = self._collect_aria_states(attrs)
 
 		# Common disabled / required from HTML attributes
-		if "disabled" in attrs and "indisponible" not in states:
-			states.append("indisponible")
-		if "required" in attrs and "requis" not in states:
-			states.append("requis")
-		if "readonly" in attrs and "lecture seule" not in states:
-			states.append("lecture seule")
+		if "disabled" in attrs and "non disponible" not in states:
+			states.append("non disponible")
+		if "required" in attrs and "obligatoire" not in states:
+			states.append("obligatoire")
+		if "readonly" in attrs and "en lecture seule" not in states:
+			states.append("en lecture seule")
 
 		if tag == "input":
 			self._flush_line()
@@ -910,25 +912,25 @@ class NVDABrowseModeParser(HTMLParser):
 				value = attrs.get("value", label or ("Envoyer" if input_type == "submit" else "Réinitialiser" if input_type == "reset" else ""))
 				parts = ["bouton", value]
 				parts.extend(states)
-				self._add_text("  ".join(p for p in parts if p))
+				self._add_text(" ".join(p for p in parts if p))
 			elif input_type == "image":
 				alt = attrs.get("alt", attrs.get("value", label or ""))
 				parts = ["bouton", alt]
 				parts.extend(states)
-				self._add_text("  ".join(p for p in parts if p))
+				self._add_text(" ".join(p for p in parts if p))
 			elif input_type == "checkbox":
 				checked = "coché" if "checked" in attrs else "non coché"
 				# Remove duplicate checked states from aria
 				filtered = [s for s in states if s not in ("coché", "non coché", "partiellement coché")]
 				parts = ["case à cocher", label, checked]
 				parts.extend(filtered)
-				self._add_text("  ".join(p for p in parts if p))
+				self._add_text(" ".join(p for p in parts if p))
 			elif input_type == "radio":
 				checked = "sélectionné" if "checked" in attrs else "non sélectionné"
 				filtered = [s for s in states if s not in ("sélectionné", "non sélectionné")]
 				parts = ["bouton radio", label, checked]
 				parts.extend(filtered)
-				self._add_text("  ".join(p for p in parts if p))
+				self._add_text(" ".join(p for p in parts if p))
 			elif input_type == "range":
 				value = attrs.get("value", "")
 				vmin = attrs.get("min", "0")
@@ -938,18 +940,18 @@ class NVDABrowseModeParser(HTMLParser):
 					parts.append(value)
 				parts.append(f"de {vmin} à {vmax}")
 				parts.extend(states)
-				self._add_text("  ".join(p for p in parts if p))
+				self._add_text(" ".join(p for p in parts if p))
 			elif input_type == "file":
 				parts = ["bouton parcourir", label]
 				parts.extend(states)
-				self._add_text("  ".join(p for p in parts if p))
+				self._add_text(" ".join(p for p in parts if p))
 			elif input_type == "color":
 				value = attrs.get("value", "")
 				parts = ["sélecteur de couleur", label]
 				if value:
 					parts.append(value)
 				parts.extend(states)
-				self._add_text("  ".join(p for p in parts if p))
+				self._add_text(" ".join(p for p in parts if p))
 			else:
 				# text, email, url, tel, password, number, search, date, time, etc.
 				type_label = _INPUT_TYPE_LABELS.get(input_type, "zone d'édition")
@@ -958,7 +960,7 @@ class NVDABrowseModeParser(HTMLParser):
 				if value and input_type != "password":
 					parts.append(f"contient {value}")
 				parts.extend(states)
-				self._add_text("  ".join(p for p in parts if p))
+				self._add_text(" ".join(p for p in parts if p))
 
 			self._announce_description(attrs)
 			self._flush_line()
@@ -967,9 +969,13 @@ class NVDABrowseModeParser(HTMLParser):
 		if tag == "textarea":
 			self._flush_line()
 			label = self._resolve_label(attrs)
-			parts = ["zone d'édition multi-lignes", label]
+			parts = []
+			if label:
+				parts.append(label)
+			parts.append("édition")
+			parts.append("multiligne")
 			parts.extend(states)
-			self._add_text("  ".join(p for p in parts if p))
+			self._add_text(" ".join(p for p in parts if p))
 			self._announce_description(attrs)
 			self._flush_line()
 			return
@@ -983,7 +989,7 @@ class NVDABrowseModeParser(HTMLParser):
 			else:
 				parts = ["liste déroulante", label]
 			parts.extend(states)
-			self._add_text("  ".join(p for p in parts if p))
+			self._add_text(" ".join(p for p in parts if p))
 			self._announce_description(attrs)
 			self._flush_line()
 			return
@@ -1006,7 +1012,7 @@ class NVDABrowseModeParser(HTMLParser):
 			if label:
 				parts.append(label)
 			parts.extend(states)
-			self._add_text("  ".join(p for p in parts if p))
+			self._add_text(" ".join(p for p in parts if p))
 			return
 
 		if tag == "fieldset":
@@ -1030,7 +1036,7 @@ class NVDABrowseModeParser(HTMLParser):
 				except (ValueError, ZeroDivisionError):
 					parts.append(value)
 			parts.extend(states)
-			self._add_text("  ".join(p for p in parts if p))
+			self._add_text(" ".join(p for p in parts if p))
 			self._flush_line()
 			# Skip fallback text content inside <progress>
 			self._skip_depth += 1
@@ -1047,7 +1053,7 @@ class NVDABrowseModeParser(HTMLParser):
 				parts.append(value)
 				parts.append(f"de {vmin} à {vmax}")
 			parts.extend(states)
-			self._add_text("  ".join(p for p in parts if p))
+			self._add_text(" ".join(p for p in parts if p))
 			self._flush_line()
 			# Skip fallback text content inside <meter>
 			self._skip_depth += 1
@@ -1058,7 +1064,7 @@ class NVDABrowseModeParser(HTMLParser):
 			label = self._resolve_label(attrs)
 			parts = ["sortie", label]
 			parts.extend(states)
-			self._add_text("  ".join(p for p in parts if p))
+			self._add_text(" ".join(p for p in parts if p))
 			return
 
 	# ------------------------------------------------------------------
@@ -1167,9 +1173,9 @@ class NVDABrowseModeParser(HTMLParser):
 				level_str = f"  niveau {level}" if level > 1 else ""
 				if count:
 					self.lines.insert(start, f"liste de {count} éléments{level_str}")
-					self.lines.append("fin de liste")
+					self.lines.append("hors de liste")
 				else:
-					self.lines.append("fin de liste")
+					self.lines.append("hors de liste")
 
 		if tag == "dl":
 			self._flush_line()
@@ -1189,18 +1195,18 @@ class NVDABrowseModeParser(HTMLParser):
 				# Insert the table header with dimensions at start
 				# Find the "tableau" line we inserted at start
 				# Replace simple "tableau" with detailed version
-				start_label = f"tableau  avec {rows} lignes et {cols} colonnes"
+				start_label = f"tableau de {rows} lignes et {cols} colonnes"
 				if label:
-					start_label = f"tableau  {label}  avec {rows} lignes et {cols} colonnes"
+					start_label = f"tableau {label} de {rows} lignes et {cols} colonnes"
 				# Walk backwards to find our "tableau" line
 				for idx in range(len(self.lines) - 1, -1, -1):
 					line = self.lines[idx]
 					if line == "tableau" or line.startswith("tableau  "):
 						self.lines[idx] = start_label
 						break
-				self.lines.append("fin de tableau")
+				self.lines.append("hors de tableau")
 			else:
-				self.lines.append("fin de tableau")
+				self.lines.append("hors de tableau")
 
 		if tag == "thead" and self._table_stack:
 			self._table_stack[-1]["in_thead"] = False
@@ -1222,14 +1228,15 @@ class NVDABrowseModeParser(HTMLParser):
 		# --- dialog ---
 		if tag == "dialog":
 			self._flush_line()
-			self.lines.append("fin de dialogue")
+			self.lines.append("hors de dialogue")
 
 		# --- Landmark end ---
+		# NVDA: speakExitForLine=False for landmarks → no exit speech
+		# during line-by-line navigation (CARET reason)
 		landmark = self._get_landmark_role(tag, attrs)
 		if landmark and self._landmark_stack:
 			self._flush_line()
-			role_name = self._landmark_stack.pop()
-			self.lines.append(f"fin de {role_name}  repère")
+			self._landmark_stack.pop()
 
 		# --- ARIA role end for group-like roles ---
 		role = attrs.get("role", "")
@@ -1239,12 +1246,12 @@ class NVDABrowseModeParser(HTMLParser):
 		# --- figure ---
 		if tag == "figure":
 			self._flush_line()
-			self.lines.append("fin de figure")
+			self.lines.append("hors de figure")
 
 		# --- Blockquote ---
 		if tag == "blockquote":
 			self._flush_line()
-			self.lines.append("fin de citation")
+			self.lines.append("hors de citation")
 
 		# --- Pre ---
 		if tag == "pre":
@@ -1259,11 +1266,11 @@ class NVDABrowseModeParser(HTMLParser):
 		# --- Media ---
 		if tag == "video":
 			self._flush_line()
-			self.lines.append("fin de vidéo")
+			self.lines.append("hors de vidéo")
 
 		if tag == "audio":
 			self._flush_line()
-			self.lines.append("fin d'audio")
+			self.lines.append("hors de audio")
 
 		if tag == "math":
 			self._flush_line()
@@ -1282,16 +1289,16 @@ class NVDABrowseModeParser(HTMLParser):
 			"timer", "marquee", "alert", "note", "directory",
 		):
 			self._flush_line()
-			self.lines.append(f"fin de {role_label}")
+			self.lines.append(f"hors de {role_label}")
 		elif role in ("dialog", "alertdialog"):
 			self._flush_line()
-			self.lines.append(f"fin de {role_label}")
+			self.lines.append(f"hors de {role_label}")
 		elif role == "application":
 			self._flush_line()
-			self.lines.append("fin d'application")
+			self.lines.append("hors de application")
 		elif role == "tabpanel":
 			self._flush_line()
-			self.lines.append("fin de panneau d'onglet")
+			self.lines.append("hors de page de propriété")
 
 	# ------------------------------------------------------------------
 	# handle_data / entity / charref
@@ -1374,7 +1381,7 @@ class NVDABrowseModeParser(HTMLParser):
 		"""Post-process lines: clean up empty lines and redundant spaces."""
 		result = []
 		for line in lines:
-			cleaned = re.sub(r"\s{2,}", "  ", line).strip()
+			cleaned = re.sub(r"\s{2,}", " ", line).strip()
 			if cleaned:
 				result.append(cleaned)
 		return result
