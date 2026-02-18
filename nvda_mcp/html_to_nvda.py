@@ -483,6 +483,12 @@ class NVDABrowseModeParser(HTMLParser):
 
 		# --- Links ---
 		if tag == "a":
+			# In NVDA, each link is on its own line — but when a link is
+			# the direct child of a heading, it stays on the same line
+			# (e.g. "titre de niveau 3  lien Audit").
+			parent_tag = self._tag_stack[-2]["tag"] if len(self._tag_stack) >= 2 else ""
+			if parent_tag not in HEADING_TAGS:
+				self._flush_line()
 			self._in_a = True
 			self._a_has_img = False
 			self._a_text = []
@@ -1134,6 +1140,7 @@ class NVDABrowseModeParser(HTMLParser):
 			self._a_has_img = False
 			self._img_alt_in_link = ""
 			self._a_attrs = {}
+			self._flush_line()
 
 		# --- Buttons ---
 		if tag == "button":
