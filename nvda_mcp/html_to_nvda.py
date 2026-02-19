@@ -1391,6 +1391,649 @@ class NVDABrowseModeParser(HTMLParser):
 # Public API
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Tab navigation parser
+# ---------------------------------------------------------------------------
+
+# Elements that are natively focusable (receive Tab) without tabindex
+_NATIVELY_FOCUSABLE_TAGS = {"a", "button", "input", "select", "textarea", "summary"}
+
+# ARIA interactive roles that are focusable when they carry tabindex
+_FOCUSABLE_ARIA_ROLES = {
+	"button", "link", "checkbox", "radio", "switch", "tab", "menuitem",
+	"menuitemcheckbox", "menuitemradio", "option", "slider", "spinbutton",
+	"combobox", "textbox", "searchbox", "treeitem", "gridcell",
+}
+
+
+class NVDATabOrderParser(HTMLParser):
+	"""Parse HTML and produce NVDA focus-mode announcements for Tab order.
+
+	Extracts all focusable elements in DOM order and produces the
+	announcement NVDA would make when the user presses Tab to reach
+	each element. This simulates keyboard-only navigation.
+
+	Focusable elements include:
+	- <a href="…"> links
+	- <button> elements
+	- <input> (except type=hidden)
+	- <select>, <textarea>
+	- <summary> (inside <details>)
+	- Elements with tabindex >= 0
+	- Elements with interactive ARIA roles + tabindex
+	"""
+
+	def __init__(self) -> None:
+		super().__init__()
+		self.tab_stops: list[str] = []
+
+		# Tag stack for context
+		self._tag_stack: list[dict] = []
+		self._skip_depth: int = 0
+
+		# Text collectors
+		self._current_text: list[str] = []
+		self._in_a: bool = False
+		self._a_text: list[str] = []
+		self._a_has_img: bool = False
+		self._img_alt_in_link: str = ""
+		self._a_attrs: dict = {}
+
+		# Button text
+		self._in_button: bool = False
+		self._button_text: list[str] = []
+		self._button_attrs: dict = {}
+
+		# Summary text
+		self._in_summary: bool = False
+		self._summary_text: list[str] = []
+		self._details_stack: list[dict] = []
+
+		# Select state
+		self._in_select: bool = False
+		self._select_attrs: dict = {}
+		self._select_options: list[dict] = []
+		self._current_option_text: list[str] = []
+		self._current_option_selected: bool = False
+		self._in_option: bool = False
+
+		# Label resolution
+		self._label_for_map: dict[str, str] = {}
+		self._current_label_for: str | None = None
+		self._current_label_text: list[str] = []
+		self._id_to_element: dict[str, dict] = {}
+		self._id_text_collector: dict[str, list[str]] = {}
+		self._current_id_targets: list[str] = []
+
+		# Landmark context (for announcing region when tabbing into it)
+		self._landmark_stack: list[str] = []
+
+	# ------------------------------------------------------------------
+	# Helpers
+	# ------------------------------------------------------------------
+
+	def _resolve_label(self, attrs: dict) -> str:
+		"""Resolve accessible name for a form control."""
+		# aria-labelledby
+		labelledby = attrs.get("aria-labelledby", "")
+		if labelledby:
+			parts = []
+			for ref_id in labelledby.split():
+				ref_text = self._resolve_id_text(ref_id)
+				if ref_text:
+					parts.append(ref_text)
+			if parts:
+				return " ".join(parts)
+		# aria-label
+		aria_label = attrs.get("aria-label", "")
+		if aria_label:
+			return aria_label
+		# <label for="…">
+		elem_id = attrs.get("id", "")
+		if elem_id and elem_id in self._label_for_map:
+			return self._label_for_map[elem_id]
+		# placeholder / title
+		return attrs.get("placeholder", attrs.get("title", ""))
+
+	def _resolve_id_text(self, ref_id: str) -> str:
+		if ref_id in self._id_text_collector:
+			return " ".join(self._id_text_collector[ref_id]).strip()
+		if ref_id in self._id_to_element:
+			return self._id_to_element[ref_id].get("text", "")
+		return ""
+
+	def _collect_aria_states(self, attrs: dict) -> list[str]:
+		parts: list[str] = []
+		for aria_attr, mapping in _ARIA_STATE_ANNOUNCEMENTS.items():
+			val = attrs.get(aria_attr, "")
+			if val and val in mapping and mapping[val]:
+				parts.append(mapping[val])
+		return parts
+
+	def _is_hidden(self, attrs: dict) -> bool:
+		return "hidden" in attrs or attrs.get("aria-hidden") == "true"
+
+	def _is_disabled(self, attrs: dict) -> bool:
+		return "disabled" in attrs or attrs.get("aria-disabled") == "true"
+
+	def _get_tabindex(self, attrs: dict) -> int | None:
+		ti = attrs.get("tabindex", None)
+		if ti is not None:
+			try:
+				return int(ti)
+			except ValueError:
+				return None
+		return None
+
+	# ------------------------------------------------------------------
+	# handle_starttag
+	# ------------------------------------------------------------------
+
+	def handle_starttag(self, tag: str, attrs_list: list) -> None:
+		attrs = dict(attrs_list)
+		self._tag_stack.append({"tag": tag, "attrs": attrs})
+
+		# Track IDs
+		elem_id = attrs.get("id", "")
+		if elem_id:
+			self._id_to_element[elem_id] = {"tag": tag, "attrs": attrs, "text": ""}
+			self._current_id_targets.append(elem_id)
+
+		# Skip hidden
+		if self._is_hidden(attrs):
+			self._skip_depth += 1
+			return
+		if self._skip_depth > 0:
+			return
+		if tag in SKIP_ELEMENTS:
+			self._skip_depth += 1
+			return
+
+		# Track landmarks
+		role = attrs.get("role", "")
+		landmark_role = None
+		if role in LANDMARK_ROLES:
+			landmark_role = role
+		elif tag in IMPLICIT_LANDMARKS:
+			if tag in ("header", "footer"):
+				for item in self._tag_stack[:-1]:
+					if item["tag"] in ("article", "section", "aside"):
+						landmark_role = None
+						break
+				else:
+					landmark_role = IMPLICIT_LANDMARKS[tag]
+			else:
+				landmark_role = IMPLICIT_LANDMARKS[tag]
+		if landmark_role:
+			label = attrs.get("aria-label", "")
+			landmark_name = LANDMARK_ROLES.get(landmark_role, landmark_role)
+			if label:
+				self._landmark_stack.append(f"{landmark_name} {label}")
+			else:
+				self._landmark_stack.append(landmark_name)
+
+		# Labels (<label for>)
+		if tag == "label":
+			for_id = attrs.get("for", "")
+			if for_id:
+				self._current_label_for = for_id
+				self._current_label_text = []
+
+		# --- Links ---
+		if tag == "a" and ("href" in attrs):
+			tabindex = self._get_tabindex(attrs)
+			if tabindex is not None and tabindex < 0:
+				return
+			if self._is_disabled(attrs):
+				return
+			self._in_a = True
+			self._a_text = []
+			self._a_has_img = False
+			self._img_alt_in_link = ""
+			self._a_attrs = attrs
+
+		# --- Images inside links ---
+		if tag == "img" and self._in_a:
+			alt = attrs.get("alt")
+			role_attr = attrs.get("role", "")
+			if role_attr not in ("presentation", "none"):
+				self._a_has_img = True
+				self._img_alt_in_link = alt or ""
+
+		# --- Buttons ---
+		if tag == "button":
+			tabindex = self._get_tabindex(attrs)
+			if tabindex is not None and tabindex < 0:
+				return
+			if self._is_disabled(attrs):
+				return
+			self._in_button = True
+			self._button_text = []
+			self._button_attrs = attrs
+
+		# --- Input ---
+		if tag == "input":
+			input_type = attrs.get("type", "text").lower()
+			if input_type == "hidden":
+				return
+			tabindex = self._get_tabindex(attrs)
+			if tabindex is not None and tabindex < 0:
+				return
+			if self._is_disabled(attrs):
+				return
+			self._emit_input(attrs, input_type)
+
+		# --- Select ---
+		if tag == "select":
+			tabindex = self._get_tabindex(attrs)
+			if tabindex is not None and tabindex < 0:
+				return
+			if self._is_disabled(attrs):
+				return
+			self._in_select = True
+			self._select_attrs = attrs
+			self._select_options = []
+
+		if tag == "option" and self._in_select:
+			self._in_option = True
+			self._current_option_text = []
+			self._current_option_selected = "selected" in attrs
+
+		# --- Textarea ---
+		if tag == "textarea":
+			tabindex = self._get_tabindex(attrs)
+			if tabindex is not None and tabindex < 0:
+				return
+			if self._is_disabled(attrs):
+				return
+			label = self._resolve_label(attrs)
+			states = self._collect_aria_states(attrs)
+			if "required" in attrs and "obligatoire" not in states:
+				states.append("obligatoire")
+			parts = [label, "édition multiligne"] if label else ["édition multiligne"]
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+
+		# --- Summary ---
+		if tag == "summary":
+			self._in_summary = True
+			self._summary_text = []
+
+		if tag == "details":
+			is_open = "open" in attrs
+			self._details_stack.append({"open": is_open})
+
+		# --- Elements with tabindex >= 0 and interactive ARIA roles ---
+		if tag not in _NATIVELY_FOCUSABLE_TAGS:
+			tabindex = self._get_tabindex(attrs)
+			if tabindex is not None and tabindex >= 0:
+				if role in _FOCUSABLE_ARIA_ROLES:
+					self._emit_aria_role_focus(tag, attrs, role)
+
+	# ------------------------------------------------------------------
+	# Emit helpers
+	# ------------------------------------------------------------------
+
+	def _emit_input(self, attrs: dict, input_type: str) -> None:
+		label = self._resolve_label(attrs)
+		states = self._collect_aria_states(attrs)
+		if "required" in attrs and "obligatoire" not in states:
+			states.append("obligatoire")
+
+		if input_type in ("submit", "button", "reset"):
+			default = {"submit": "Envoyer", "reset": "Réinitialiser"}.get(input_type, "")
+			value = attrs.get("value", label or default)
+			parts = ["bouton", value]
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif input_type == "image":
+			alt = attrs.get("alt", attrs.get("value", label or ""))
+			parts = ["bouton", alt]
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif input_type == "checkbox":
+			checked = "coché" if "checked" in attrs else "non coché"
+			parts = [label, "case à cocher", checked] if label else ["case à cocher", checked]
+			parts.extend(s for s in states if s not in ("coché", "non coché"))
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif input_type == "radio":
+			checked = "sélectionné" if "checked" in attrs else "non sélectionné"
+			parts = [label, "bouton radio", checked] if label else ["bouton radio", checked]
+			parts.extend(s for s in states if s not in ("sélectionné", "non sélectionné"))
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif input_type == "range":
+			value = attrs.get("value", "")
+			vmin = attrs.get("min", "0")
+			vmax = attrs.get("max", "100")
+			parts = [label, "potentiomètre"] if label else ["potentiomètre"]
+			if value:
+				parts.append(value)
+			parts.append(f"de {vmin} à {vmax}")
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif input_type == "file":
+			parts = [label, "bouton Parcourir…"] if label else ["bouton Parcourir…"]
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif input_type == "color":
+			value = attrs.get("value", "")
+			parts = [label, "bouton"] if label else ["bouton"]
+			if value:
+				parts.append(value)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		else:
+			type_label = _INPUT_TYPE_LABELS.get(input_type, "édition")
+			value = attrs.get("value", "")
+			parts = [label, type_label] if label else [type_label]
+			if value and input_type != "password":
+				parts.append(f"contient {value}")
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+
+	def _emit_aria_role_focus(self, tag: str, attrs: dict, role: str) -> None:
+		label = attrs.get("aria-label", "")
+		states = self._collect_aria_states(attrs)
+		role_label = ARIA_ROLE_LABELS.get(role, role)
+
+		if role in ("button",):
+			parts = ["bouton"]
+			if label:
+				parts.append(label)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif role == "link":
+			parts = ["lien"]
+			if label:
+				parts.append(label)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif role in ("checkbox",):
+			checked_val = attrs.get("aria-checked", "false")
+			checked = "coché" if checked_val == "true" else ("semi-coché" if checked_val == "mixed" else "non coché")
+			parts = [label, "case à cocher", checked] if label else ["case à cocher", checked]
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif role == "switch":
+			checked_val = attrs.get("aria-checked", "false")
+			state = "activé" if checked_val == "true" else "désactivé"
+			parts = [label, "bascule", state] if label else ["bascule", state]
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif role == "tab":
+			parts = ["onglet"]
+			if label:
+				parts.append(label)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif role in ("slider", "spinbutton"):
+			parts = [role_label]
+			if label:
+				parts.append(label)
+			vnow = attrs.get("aria-valuenow", "")
+			if vnow:
+				parts.append(vnow)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		elif role in ("combobox", "textbox", "searchbox", "listbox"):
+			parts = [role_label]
+			if label:
+				parts.append(label)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+		else:
+			parts = [role_label]
+			if label:
+				parts.append(label)
+			parts.extend(states)
+			if parts:
+				self.tab_stops.append(" ".join(p for p in parts if p))
+
+	# ------------------------------------------------------------------
+	# handle_data
+	# ------------------------------------------------------------------
+
+	def handle_data(self, data: str) -> None:
+		if self._skip_depth > 0:
+			return
+		text = " ".join(data.split())
+		if not text:
+			return
+
+		# Collect for id resolution
+		if self._current_id_targets:
+			for target_id in self._current_id_targets:
+				if target_id not in self._id_text_collector:
+					self._id_text_collector[target_id] = []
+				self._id_text_collector[target_id].append(text)
+			for target_id in self._current_id_targets:
+				if target_id in self._id_to_element:
+					prev = self._id_to_element[target_id].get("text", "")
+					self._id_to_element[target_id]["text"] = (prev + " " + text).strip()
+
+		# Collect for <label for>
+		if self._current_label_for is not None:
+			self._current_label_text.append(text)
+
+		# Link text
+		if self._in_a:
+			self._a_text.append(text)
+
+		# Button text
+		if self._in_button:
+			self._button_text.append(text)
+
+		# Summary text
+		if self._in_summary:
+			self._summary_text.append(text)
+
+		# Option text
+		if self._in_option and self._in_select:
+			self._current_option_text.append(text)
+
+	def handle_entityref(self, name: str) -> None:
+		if self._skip_depth > 0:
+			return
+		entity_map = {"amp": "&", "lt": "<", "gt": ">", "quot": '"', "apos": "'", "nbsp": " "}
+		char = entity_map.get(name, f"&{name};")
+		if self._in_a:
+			self._a_text.append(char)
+		elif self._in_button:
+			self._button_text.append(char)
+		elif self._in_summary:
+			self._summary_text.append(char)
+		elif self._in_option:
+			self._current_option_text.append(char)
+
+	def handle_charref(self, name: str) -> None:
+		if self._skip_depth > 0:
+			return
+		try:
+			if name.startswith("x"):
+				char = chr(int(name[1:], 16))
+			else:
+				char = chr(int(name))
+		except (ValueError, OverflowError):
+			char = f"&#{name};"
+		if self._in_a:
+			self._a_text.append(char)
+		elif self._in_button:
+			self._button_text.append(char)
+		elif self._in_summary:
+			self._summary_text.append(char)
+		elif self._in_option:
+			self._current_option_text.append(char)
+
+	# ------------------------------------------------------------------
+	# handle_endtag
+	# ------------------------------------------------------------------
+
+	def handle_endtag(self, tag: str) -> None:
+		# Pop tag stack
+		while self._tag_stack and self._tag_stack[-1]["tag"] != tag:
+			self._tag_stack.pop()
+		if self._tag_stack:
+			popped = self._tag_stack.pop()
+		else:
+			popped = {"tag": tag, "attrs": {}}
+		attrs = popped.get("attrs", {})
+
+		# Track id collection
+		elem_id = attrs.get("id", "")
+		if elem_id and self._current_id_targets and self._current_id_targets[-1] == elem_id:
+			self._current_id_targets.pop()
+
+		# Skip hidden/script
+		if tag in SKIP_ELEMENTS:
+			self._skip_depth = max(0, self._skip_depth - 1)
+			return
+		if self._is_hidden(attrs):
+			self._skip_depth = max(0, self._skip_depth - 1)
+			return
+		if self._skip_depth > 0:
+			return
+
+		# Labels
+		if tag == "label":
+			if self._current_label_for:
+				label_text = " ".join(self._current_label_text).strip()
+				if label_text:
+					self._label_for_map[self._current_label_for] = label_text
+				self._current_label_for = None
+				self._current_label_text = []
+
+		# Links: emit on close
+		if tag == "a" and self._in_a:
+			link_parts = []
+			if self._a_has_img:
+				link_parts.append("graphique")
+				if self._img_alt_in_link:
+					link_parts.append(self._img_alt_in_link)
+			inline = " ".join(self._a_text).strip()
+			if inline:
+				link_parts.append(inline)
+			full_text = " ".join(link_parts).strip()
+
+			aria_label = self._a_attrs.get("aria-label", "")
+			if aria_label:
+				full_text = aria_label
+
+			states = self._collect_aria_states(self._a_attrs)
+			parts = ["lien"]
+			if full_text:
+				parts.append(full_text)
+			else:
+				href = self._a_attrs.get("href", "")
+				parts.append(href)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+
+			self._in_a = False
+			self._a_text = []
+			self._a_has_img = False
+			self._img_alt_in_link = ""
+			self._a_attrs = {}
+
+		# Buttons: emit on close
+		if tag == "button" and self._in_button:
+			label = self._button_attrs.get("aria-label", "")
+			if not label:
+				label = " ".join(self._button_text).strip()
+			states = self._collect_aria_states(self._button_attrs)
+			parts = ["bouton"]
+			if label:
+				parts.append(label)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+			self._in_button = False
+			self._button_text = []
+			self._button_attrs = {}
+
+		# Summary: emit on close
+		if tag == "summary" and self._in_summary:
+			text = " ".join(self._summary_text).strip()
+			is_open = self._details_stack[-1]["open"] if self._details_stack else False
+			state = "développé" if is_open else "réduit"
+			parts = ["bouton", text, state] if text else ["bouton", state]
+			self.tab_stops.append(" ".join(p for p in parts if p))
+			self._in_summary = False
+			self._summary_text = []
+
+		if tag == "details" and self._details_stack:
+			self._details_stack.pop()
+
+		# Select: emit on close
+		if tag == "option" and self._in_option:
+			option_text = " ".join(self._current_option_text).strip()
+			self._select_options.append({
+				"text": option_text,
+				"selected": self._current_option_selected,
+			})
+			self._in_option = False
+			self._current_option_text = []
+			self._current_option_selected = False
+
+		if tag == "select" and self._in_select:
+			label = self._resolve_label(self._select_attrs)
+			states = self._collect_aria_states(self._select_attrs)
+			multiple = "multiple" in self._select_attrs
+			selected_opt = ""
+			for opt in self._select_options:
+				if opt["selected"]:
+					selected_opt = opt["text"]
+					break
+			if not selected_opt and self._select_options:
+				selected_opt = self._select_options[0]["text"]
+
+			if multiple:
+				parts = [label, "liste sélection multiple"] if label else ["liste sélection multiple"]
+			else:
+				parts = [label, "liste déroulante"] if label else ["liste déroulante"]
+			if selected_opt:
+				parts.append(selected_opt)
+			parts.extend(states)
+			self.tab_stops.append(" ".join(p for p in parts if p))
+			self._in_select = False
+			self._select_attrs = {}
+			self._select_options = []
+
+		# Landmark end
+		landmark_role = None
+		role = attrs.get("role", "")
+		if role in LANDMARK_ROLES:
+			landmark_role = role
+		elif tag in IMPLICIT_LANDMARKS:
+			landmark_role = IMPLICIT_LANDMARKS.get(tag)
+		if landmark_role and self._landmark_stack:
+			self._landmark_stack.pop()
+
+	def get_tab_stops(self) -> list[str]:
+		"""Return all Tab stops (focusable elements) in DOM order."""
+		result = []
+		for stop in self.tab_stops:
+			cleaned = re.sub(r"\s{2,}", " ", stop).strip()
+			if cleaned:
+				result.append(cleaned)
+		return result
+
+
+def html_to_nvda_tab_lines(html: str) -> list[str]:
+	"""Convert HTML to NVDA Tab-order announcements.
+
+	Simulates what NVDA announces when pressing Tab repeatedly on a page.
+	Only focusable/interactive elements are included (links, buttons,
+	form controls, elements with tabindex, etc.).
+
+	Args:
+		html: The HTML content of a web page.
+
+	Returns:
+		A list of strings, each representing what NVDA announces when
+		pressing Tab to reach the next focusable element.
+	"""
+	parser = NVDATabOrderParser()
+	parser.feed(html)
+	return parser.get_tab_stops()
+
+
 def html_to_nvda_lines(html: str) -> list[str]:
 	"""Convert an HTML string to a list of NVDA browse mode lines.
 
@@ -1427,9 +2070,20 @@ def fetch_and_convert(url: str, timeout: float = 15.0) -> list[str]:
 if __name__ == "__main__":
 	import sys
 
-	if len(sys.argv) > 1:
-		url = sys.argv[1]
-		lines = fetch_and_convert(url)
+	# --tab flag for Tab order output
+	tab_mode = "--tab" in sys.argv
+	args = [a for a in sys.argv[1:] if a != "--tab"]
+
+	if args:
+		url = args[0]
+		import urllib.request as _ur
+		_req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Gecko/20100101 Firefox/128.0"})
+		with _ur.urlopen(_req, timeout=15) as _resp:
+			_html = _resp.read().decode("utf-8", errors="replace")
+		if tab_mode:
+			lines = html_to_nvda_tab_lines(_html)
+		else:
+			lines = html_to_nvda_lines(_html)
 	else:
 		# Demo with a comprehensive HTML page
 		demo_html = """<!DOCTYPE html>
@@ -1497,7 +2151,12 @@ if __name__ == "__main__":
   </footer>
 </body>
 </html>"""
-		lines = html_to_nvda_lines(demo_html)
+		if tab_mode:
+			lines = html_to_nvda_tab_lines(demo_html)
+		else:
+			lines = html_to_nvda_lines(demo_html)
 
+	mode_label = "TAB ORDER" if tab_mode else "BROWSE MODE"
+	print(f"--- {mode_label} ({len(lines)} entries) ---")
 	for i, line in enumerate(lines, 1):
 		print(f"{i:3d}. {line}")

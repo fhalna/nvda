@@ -20,7 +20,7 @@ import threading
 import time
 import urllib.request
 
-from .html_to_nvda import html_to_nvda_lines
+from .html_to_nvda import html_to_nvda_lines, html_to_nvda_tab_lines
 
 
 def fetch_html(url: str) -> str:
@@ -40,11 +40,13 @@ def fetch_html(url: str) -> str:
 class MockNVDABridge:
 	"""Mock NVDA bridge that serves browse mode lines from parsed HTML."""
 
-	def __init__(self, browse_lines: list[str], page_title: str, url: str):
+	def __init__(self, browse_lines: list[str], tab_lines: list[str], page_title: str, url: str):
 		self.browse_lines = browse_lines
+		self.tab_lines = tab_lines
 		self.page_title = page_title
 		self.url = url
 		self.current_line = 0
+		self.current_tab = -1  # -1 = before first tab stop
 		self.speech_history: list[str] = []
 
 	def dispatch(self, method: str, params: dict) -> dict:
@@ -101,6 +103,17 @@ class MockNVDABridge:
 			elif keys == "upArrow" and self.current_line > 0:
 				self.current_line -= 1
 				self.speech_history.append(self.browse_lines[self.current_line])
+			elif keys == "tab" and self.tab_lines:
+				if self.current_tab < len(self.tab_lines) - 1:
+					self.current_tab += 1
+					self.speech_history.append(self.tab_lines[self.current_tab])
+			elif keys == "shift+tab" and self.tab_lines:
+				if self.current_tab > 0:
+					self.current_tab -= 1
+					self.speech_history.append(self.tab_lines[self.current_tab])
+			elif keys == "control+home":
+				self.current_line = 0
+				self.current_tab = -1
 			return {"sent": keys}
 
 		elif method == "reviewCurrentLine":
@@ -238,7 +251,12 @@ def run_demo(url: str | None = None, html: str | None = None):
 	# Parse HTML to NVDA browse mode lines
 	print(f"\nConversion HTML → sortie NVDA browse mode ...")
 	browse_lines = html_to_nvda_lines(html)
-	print(f"  {len(browse_lines)} lignes générées.\n")
+	print(f"  {len(browse_lines)} lignes générées.")
+
+	# Parse HTML to Tab order lines
+	print(f"Conversion HTML → ordre de tabulation ...")
+	tab_lines = html_to_nvda_tab_lines(html)
+	print(f"  {len(tab_lines)} éléments focusables trouvés.\n")
 
 	# Extract page title from HTML
 	import re
@@ -246,7 +264,7 @@ def run_demo(url: str | None = None, html: str | None = None):
 	page_title = title_match.group(1).strip() if title_match else url or "Page"
 
 	# --- Start mock bridge ---
-	bridge = MockNVDABridge(browse_lines, page_title, url or "")
+	bridge = MockNVDABridge(browse_lines, tab_lines, page_title, url or "")
 	server = http.server.HTTPServer(("127.0.0.1", 8765), MockBridgeHTTPHandler)
 	server.bridge = bridge
 	thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -302,9 +320,28 @@ def run_demo(url: str | None = None, html: str | None = None):
 			print("\n    ── fin de page ──")
 			break
 
-	# --- Step 4: Speech history ---
+	# --- Step 4: Tab navigation ---
 	print("\n" + "─" * 72)
-	print("ÉTAPE 4 : Historique de parole (10 dernières)")
+	print("ÉTAPE 4 : Parcours page avec touche Tab (éléments focusables)")
+	print("─" * 72)
+
+	# Reset to top
+	send_keys("control+home")
+
+	for i in range(len(tab_lines)):
+		send_keys("tab")
+		line = review_current_line()
+		# Use the tab line directly since review_current_line tracks browse lines
+		if i < len(tab_lines):
+			print(f"  Tab → {tab_lines[i]}")
+
+		if bridge.current_tab >= len(tab_lines) - 1:
+			print("\n    ── dernier élément focusable ──")
+			break
+
+	# --- Step 5: Speech history ---
+	print("\n" + "─" * 72)
+	print("ÉTAPE 5 : Historique de parole (10 dernières)")
 	print("─" * 72)
 	print(get_speech_history(count=10))
 
