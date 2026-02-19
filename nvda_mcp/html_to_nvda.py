@@ -550,7 +550,7 @@ class NVDABrowseModeParser(HTMLParser):
 			label = self._get_accessible_name(tag, attrs) or attrs.get("summary", "")
 			# Insert placeholder line – will be replaced with dimensions at end
 			if label:
-				self.lines.append(f"tableau  {label}")
+				self.lines.append(f"tableau {label}")
 			else:
 				self.lines.append("tableau")
 			self._table_stack.append({
@@ -593,7 +593,7 @@ class NVDABrowseModeParser(HTMLParser):
 				t["current_row_cols"] += 1
 				t["max_cols"] = max(t["max_cols"], t["current_row_cols"])
 				row, col = t["row"], t["col"]
-				self._add_text(f"ligne {row}  colonne {col}")
+				self._add_text(f"ligne {row} colonne {col}")
 				if tag == "th":
 					self._add_text("en-tête de colonne")
 
@@ -623,7 +623,7 @@ class NVDABrowseModeParser(HTMLParser):
 			self._flush_line()
 			label = self._get_accessible_name(tag, attrs)
 			if label:
-				self.lines.append(f"dialogue  {label}")
+				self.lines.append(f"dialogue {label}")
 			else:
 				self.lines.append("dialogue")
 
@@ -650,7 +650,7 @@ class NVDABrowseModeParser(HTMLParser):
 			self._flush_line()
 			label = self._get_accessible_name(tag, attrs)
 			if label:
-				self.lines.append(f"figure  {label}")
+				self.lines.append(f"figure {label}")
 			else:
 				self.lines.append("figure")
 
@@ -658,21 +658,21 @@ class NVDABrowseModeParser(HTMLParser):
 		if tag == "video":
 			self._flush_line()
 			label = self._get_accessible_name(tag, attrs) or ""
-			self.lines.append(f"vidéo  {label}".strip())
+			self.lines.append(f"vidéo {label}".strip())
 
 		if tag == "audio":
 			self._flush_line()
 			label = self._get_accessible_name(tag, attrs) or ""
-			self.lines.append(f"audio  {label}".strip())
+			self.lines.append(f"audio {label}".strip())
 
 		if tag == "iframe":
 			self._flush_line()
 			frame_title = attrs.get("title", attrs.get("aria-label", ""))
 			if frame_title:
-				self.lines.append(f"cadre  {frame_title}")
+				self.lines.append(f"cadre {frame_title}")
 			else:
 				src = attrs.get("src", "")
-				self.lines.append(f"cadre  {src}")
+				self.lines.append(f"cadre {src}")
 
 		# --- abbr with title ---
 		if tag == "abbr":
@@ -691,7 +691,7 @@ class NVDABrowseModeParser(HTMLParser):
 			self._flush_line()
 			alt = attrs.get("alttext", attrs.get("aria-label", ""))
 			if alt:
-				self.lines.append(f"math  {alt}")
+				self.lines.append(f"math {alt}")
 			else:
 				self.lines.append("math")
 
@@ -791,7 +791,7 @@ class NVDABrowseModeParser(HTMLParser):
 		# Tabpanel
 		if role == "tabpanel":
 			self._flush_line()
-			parts = ["panneau d'onglet"]
+			parts = ["page de propriété"]
 			if label:
 				parts.append(label)
 			self.lines.append(" ".join(parts))
@@ -810,7 +810,7 @@ class NVDABrowseModeParser(HTMLParser):
 		if role == "figure":
 			self._flush_line()
 			if label:
-				self.lines.append(f"figure  {label}")
+				self.lines.append(f"figure {label}")
 			else:
 				self.lines.append("figure")
 			return
@@ -935,30 +935,30 @@ class NVDABrowseModeParser(HTMLParser):
 				value = attrs.get("value", "")
 				vmin = attrs.get("min", "0")
 				vmax = attrs.get("max", "100")
-				parts = ["curseur", label]
+				parts = ["potentiomètre", label]
 				if value:
 					parts.append(value)
 				parts.append(f"de {vmin} à {vmax}")
 				parts.extend(states)
 				self._add_text(" ".join(p for p in parts if p))
 			elif input_type == "file":
-				parts = ["bouton parcourir", label]
+				parts = ["bouton", label]
 				parts.extend(states)
 				self._add_text(" ".join(p for p in parts if p))
 			elif input_type == "color":
 				value = attrs.get("value", "")
-				parts = ["sélecteur de couleur", label]
+				parts = ["bouton", label]
 				if value:
 					parts.append(value)
 				parts.extend(states)
 				self._add_text(" ".join(p for p in parts if p))
 			else:
 				# text, email, url, tel, password, number, search, date, time, etc.
-				type_label = _INPUT_TYPE_LABELS.get(input_type, "zone d'édition")
+				type_label = _INPUT_TYPE_LABELS.get(input_type, "édition")
 				value = attrs.get("value", "")
 				parts = [type_label, label]
 				if value and input_type != "password":
-					parts.append(f"contient {value}")
+					parts.append(value)
 				parts.extend(states)
 				self._add_text(" ".join(p for p in parts if p))
 
